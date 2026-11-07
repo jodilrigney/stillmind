@@ -11,31 +11,68 @@ import {
   Text,
   View,
 } from "react-native";
-import { HARMONY_NOTES, holdHarmony, releaseAllHarmony, releaseHarmony, stopTone } from "../src/audio";
+import {
+  HARMONY_NOTES,
+  holdHarmony,
+  playRhythmBed,
+  releaseAllHarmony,
+  releaseHarmony,
+  RHYTHM_BEDS,
+  setHarmonyVoicing,
+  setRhythmRate,
+  setRhythmVolume,
+  stopFrequencyPad,
+  stopRhythmBed,
+  stopTone,
+  type HarmonyVoicing,
+  type RhythmBedId,
+} from "../src/audio";
 import { tapHoldPulse, tapSide } from "../src/haptics";
-import { imgSource, photos } from "../src/images";
+import { LoopVideo } from "../src/components/LoopVideo";
+import { imgSource } from "../src/images";
 import { useSessionAwake } from "../src/keepAwake";
-import { useLandscapeOnFocus } from "../src/landscape";
+import { useRotatableOnFocus } from "../src/landscape";
+import { libraryFor, libraryPhoto } from "../src/library";
 import { useOscillate } from "../src/motion";
 import { colors, fonts } from "../src/theme";
 
 type Burst = { id: number; x: number; y: number };
 type Thumb = { id: number; x: number; y: number };
 
+const TRI_PHOTOS = libraryFor("tri-calm");
+const RHYTHM_VOL = 0.2;
+
+function rhythmWord(rate: number) {
+  if (rate < 0.97) return "Slow";
+  if (rate > 1.03) return "Flowing";
+  return "Gentle";
+}
+
 export default function TriCalm() {
   useSessionAwake();
-  useLandscapeOnFocus();
+  useRotatableOnFocus();
   const [on, setOn] = useState(true);
   const [hapticOn, setHapticOn] = useState(true);
   const [hapticVol, setHapticVol] = useState(0.55);
+  const [musicOn, setMusicOn] = useState(true);
+  const [musicVol, setMusicVol] = useState(RHYTHM_VOL);
+  const [rhythm, setRhythm] = useState(1);
+  const [bedId, setBedId] = useState<RhythmBedId>("still");
+  const [voicing, setVoicing] = useState<HarmonyVoicing>("dyad");
+  const [photoId, setPhotoId] = useState(TRI_PHOTOS[0]?.id ?? "dock-mist");
+  const photo = libraryPhoto(photoId);
+  const bed = RHYTHM_BEDS.find((b) => b.id === bedId) ?? RHYTHM_BEDS[0];
   const feel = { on: hapticOn, volume: hapticVol };
 
   useFocusEffect(
     useCallback(() => {
       stopTone();
+      stopFrequencyPad();
       return () => {
         releaseAllHarmony();
         stopTone();
+        stopFrequencyPad();
+        stopRhythmBed();
       };
     }, [])
   );
@@ -43,6 +80,31 @@ export default function TriCalm() {
   useEffect(() => {
     if (!on) releaseAllHarmony();
   }, [on]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!on || !musicOn || musicVol <= 0.01) {
+        await stopRhythmBed();
+        return;
+      }
+      await playRhythmBed(musicVol, rhythm, bedId);
+      if (!alive) await stopRhythmBed();
+    })().catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [on, musicOn, bedId]);
+
+  useEffect(() => {
+    if (!musicOn || !on) return;
+    setRhythmRate(rhythm).catch(() => {});
+  }, [rhythm, musicOn, on]);
+
+  useEffect(() => {
+    if (!musicOn || !on) return;
+    setRhythmVolume(musicVol);
+  }, [musicVol, musicOn, on]);
 
   const onPressSide = useCallback(
     (side: "L" | "R") => {
@@ -53,82 +115,174 @@ export default function TriCalm() {
     [on, hapticOn, hapticVol]
   );
 
-  const onReleaseSide = useCallback(
-    (side: "L" | "R") => {
-      releaseHarmony(side);
-    },
-    []
-  );
+  const onReleaseSide = useCallback((side: "L" | "R") => {
+    releaseHarmony(side);
+  }, []);
 
   const onReleaseAll = useCallback(() => {
     releaseAllHarmony();
   }, []);
 
+  const nextPhoto = () => {
+    const i = TRI_PHOTOS.findIndex((p) => p.id === photoId);
+    const next = TRI_PHOTOS[(i + 1) % TRI_PHOTOS.length];
+    if (next) setPhotoId(next.id);
+  };
+
+  const nextBed = () => {
+    const i = RHYTHM_BEDS.findIndex((b) => b.id === bedId);
+    const next = RHYTHM_BEDS[(i + 1) % RHYTHM_BEDS.length];
+    if (next) setBedId(next.id);
+  };
+
+  const toggleVoicing = () => {
+    const next: HarmonyVoicing = voicing === "dyad" ? "single" : "dyad";
+    setVoicing(next);
+    setHarmonyVoicing(next);
+  };
+
   return (
     <View style={styles.root}>
-      <Pool
-        running={on}
-        hapticOn={hapticOn}
-        hapticVol={hapticVol}
-        onPressSide={onPressSide}
-        onReleaseSide={onReleaseSide}
-        onReleaseAll={onReleaseAll}
-      />
-      <LinearGradient
-        colors={["rgba(244,240,230,0.22)", "transparent", "rgba(244,240,230,0.18)"]}
-        pointerEvents="none"
-        style={StyleSheet.absoluteFill}
-      />
-      <View style={styles.topBar}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={styles.back}>
-          <Ionicons name="chevron-back" size={20} color={colors.ink} />
-        </Pressable>
-        <View style={styles.titlePill}>
-          <Text style={styles.topNotes}>
-            {HARMONY_NOTES.L} left · {HARMONY_NOTES.R} right
-          </Text>
-          <Text style={styles.topTitle}>Rest both thumbs on the water</Text>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={on ? "Pause" : "Begin"}
-          onPress={() => setOn((v) => !v)}
-          style={[styles.feelBtn, !on && styles.feelBtnOn]}
-        >
-          <Ionicons name={on ? "pause" : "play"} size={14} color={on ? colors.linen : colors.sageDeep} />
-          <Text style={[styles.feelText, !on && styles.feelTextOn]}>{on ? "Pause" : "Begin"}</Text>
-        </Pressable>
-      </View>
-      <View style={styles.bottomBar} pointerEvents="box-none">
-        <View style={styles.controlRow}>
+      <View style={styles.waterPane}>
+        <Pool
+          running={on}
+          photo={photo.source}
+          video={photo.video}
+          hapticOn={hapticOn}
+          hapticVol={hapticVol}
+          onPressSide={onPressSide}
+          onReleaseSide={onReleaseSide}
+          onReleaseAll={onReleaseAll}
+        />
+        <LinearGradient
+          colors={["rgba(244,240,230,0.22)", "transparent", "rgba(244,240,230,0.1)"]}
+          pointerEvents="none"
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.topBar}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={styles.back}>
+            <Ionicons name="chevron-back" size={20} color={colors.ink} />
+          </Pressable>
+          <View style={styles.titlePill}>
+            <Text style={styles.topNotes}>
+              {voicing === "single" ? "E · G bowls" : `${HARMONY_NOTES.L} · ${HARMONY_NOTES.R} bowls`}
+            </Text>
+            <Text style={styles.topTitle}>Touch the water anywhere</Text>
+          </View>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={hapticOn ? "Turn vibration off" : "Turn vibration on"}
-            onPress={() => setHapticOn((v) => !v)}
-            style={[styles.hapticChip, hapticOn && styles.hapticChipOn]}
+            accessibilityLabel="Change background photo"
+            onPress={nextPhoto}
+            style={styles.photoBtn}
           >
-            <Ionicons name={hapticOn ? "pulse-outline" : "pulse"} size={14} color={hapticOn ? colors.linen : colors.sageDeep} />
-            <Text style={[styles.hapticText, hapticOn && styles.hapticTextOn]}>{hapticOn ? "Haptics on" : "Haptics off"}</Text>
+            <Ionicons name="images-outline" size={16} color={colors.ink} />
           </Pressable>
-          {hapticOn ? (
-            <View style={styles.volRow}>
-              <Text style={styles.volLab}>Volume</Text>
-              <Pressable onPress={() => setHapticVol((v) => Math.max(0.1, +(v - 0.1).toFixed(1)))} style={styles.nudge}>
-                <Text>-</Text>
-              </Pressable>
-              <View style={styles.volTrack}>
-                <View style={[styles.volFill, { width: `${Math.round(hapticVol * 100)}%` }]} />
-              </View>
-              <Pressable onPress={() => setHapticVol((v) => Math.min(1, +(v + 0.1).toFixed(1)))} style={styles.nudge}>
-                <Text>+</Text>
-              </Pressable>
-            </View>
-          ) : null}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={on ? "Pause" : "Begin"}
+            onPress={() => setOn((v) => !v)}
+            style={[styles.feelBtn, !on && styles.feelBtnOn]}
+          >
+            <Ionicons name={on ? "pause" : "play"} size={14} color={on ? colors.linen : colors.sageDeep} />
+            <Text style={[styles.feelText, !on && styles.feelTextOn]}>{on ? "Pause" : "Begin"}</Text>
+          </Pressable>
         </View>
-        <View style={styles.hintPill} pointerEvents="none">
-          <Text style={styles.hint}>
-            {on ? "Two bowls in a fifth. Hold, then lift to fade." : "Paused"}
-          </Text>
+      </View>
+      <View style={styles.controlPane} pointerEvents="box-none">
+        <LinearGradient
+          colors={["rgba(232,238,236,0.55)", "rgba(244,240,230,0.92)"]}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+        <View style={styles.bottomBar} pointerEvents="box-none">
+          <View style={styles.controlRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={musicOn ? "Mute background music" : "Play background music"}
+              onPress={() => setMusicOn((v) => !v)}
+              style={[styles.hapticChip, musicOn && styles.hapticChipOn]}
+            >
+              <Ionicons name={musicOn ? "musical-notes-outline" : "volume-mute-outline"} size={14} color={musicOn ? colors.linen : colors.sageDeep} />
+              <Text style={[styles.hapticText, musicOn && styles.hapticTextOn]}>{musicOn ? "Music" : "Muted"}</Text>
+            </Pressable>
+            {musicOn ? (
+              <>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Music bed ${bed.title}. Tap to change.`}
+                  onPress={nextBed}
+                  style={[styles.hapticChip, styles.hapticChipOn]}
+                >
+                  <Ionicons name="leaf-outline" size={14} color={colors.linen} />
+                  <Text style={[styles.hapticText, styles.hapticTextOn]}>{bed.title}</Text>
+                </Pressable>
+                <View style={styles.volRow}>
+                  <Text style={styles.volLab}>Vol</Text>
+                  <Pressable onPress={() => setMusicVol((v) => Math.max(0.05, +(v - 0.05).toFixed(2)))} style={styles.nudge}>
+                    <Text>-</Text>
+                  </Pressable>
+                  <View style={styles.volTrack}>
+                    <View style={[styles.volFill, { width: `${Math.round(musicVol * 100)}%` }]} />
+                  </View>
+                  <Pressable onPress={() => setMusicVol((v) => Math.min(0.55, +(v + 0.05).toFixed(2)))} style={styles.nudge}>
+                    <Text>+</Text>
+                  </Pressable>
+                </View>
+                <View style={styles.volRow}>
+                  <Text style={styles.volLab}>Rhythm</Text>
+                  <Pressable onPress={() => setRhythm((v) => Math.max(0.92, +(v - 0.04).toFixed(2)))} style={styles.nudge}>
+                    <Text>-</Text>
+                  </Pressable>
+                  <View style={styles.volTrack}>
+                    <View style={[styles.volFill, { width: `${Math.round(((rhythm - 0.92) / 0.16) * 100)}%` }]} />
+                  </View>
+                  <Pressable onPress={() => setRhythm((v) => Math.min(1.08, +(v + 0.04).toFixed(2)))} style={styles.nudge}>
+                    <Text>+</Text>
+                  </Pressable>
+                  <Text style={styles.rhythmWord}>{rhythmWord(rhythm)}</Text>
+                </View>
+              </>
+            ) : null}
+          </View>
+          <View style={styles.controlRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={voicing === "dyad" ? "Bowl dyad on. Tap for single pitch." : "Single pitch on. Tap for dyad."}
+              onPress={toggleVoicing}
+              style={[styles.hapticChip, styles.hapticChipOn]}
+            >
+              <Ionicons name={voicing === "dyad" ? "git-merge-outline" : "remove-outline"} size={14} color={colors.linen} />
+              <Text style={[styles.hapticText, styles.hapticTextOn]}>{voicing === "dyad" ? "Dyad" : "Single"}</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={hapticOn ? "Turn vibration off" : "Turn vibration on"}
+              onPress={() => setHapticOn((v) => !v)}
+              style={[styles.hapticChip, hapticOn && styles.hapticChipOn]}
+            >
+              <Ionicons name={hapticOn ? "pulse-outline" : "pulse"} size={14} color={hapticOn ? colors.linen : colors.sageDeep} />
+              <Text style={[styles.hapticText, hapticOn && styles.hapticTextOn]}>{hapticOn ? "Haptics on" : "Haptics off"}</Text>
+            </Pressable>
+            {hapticOn ? (
+              <View style={styles.volRow}>
+                <Text style={styles.volLab}>Feel</Text>
+                <Pressable onPress={() => setHapticVol((v) => Math.max(0.1, +(v - 0.1).toFixed(1)))} style={styles.nudge}>
+                  <Text>-</Text>
+                </Pressable>
+                <View style={styles.volTrack}>
+                  <View style={[styles.volFill, { width: `${Math.round(hapticVol * 100)}%` }]} />
+                </View>
+                <Pressable onPress={() => setHapticVol((v) => Math.min(1, +(v + 0.1).toFixed(1)))} style={styles.nudge}>
+                  <Text>+</Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
+          <View style={styles.hintPill} pointerEvents="none">
+            <Text style={styles.hint}>
+              {on ? `${photo.title} · hold to ripple, feel, and sing` : "Paused"}
+            </Text>
+          </View>
         </View>
       </View>
     </View>
@@ -137,6 +291,8 @@ export default function TriCalm() {
 
 function Pool({
   running,
+  photo,
+  video,
   hapticOn,
   hapticVol,
   onPressSide,
@@ -144,6 +300,8 @@ function Pool({
   onReleaseAll,
 }: {
   running: boolean;
+  photo: number;
+  video?: number;
   hapticOn: boolean;
   hapticVol: number;
   onPressSide: (side: "L" | "R") => void;
@@ -197,6 +355,7 @@ function Pool({
   };
 
   const onStart = (e: GestureResponderEvent) => {
+    if (!running) return;
     const next = readTouches(e);
     const prev = thumbsRef.current;
     const added = next.filter((t) => !prev.has(t.id));
@@ -207,6 +366,7 @@ function Pool({
       if (now - (lastSpawnAt.current.get(t.id) ?? 0) < 50) return;
       lastSpawnAt.current.set(t.id, now);
       spawn(t.x, t.y);
+      tapHoldPulse(sideOf(t.x), { on: hapticOn, volume: hapticVol });
       addSide(sideOf(t.x));
     });
   };
@@ -245,21 +405,12 @@ function Pool({
     return () => clearInterval(t);
   }, [thumbs.length, running, spawn, box.w, hapticOn, hapticVol]);
 
-  useEffect(() => {
-    if (!running || thumbs.length) return;
-    spawn(box.w * 0.5, box.h * 0.52);
-    const t = setInterval(() => spawn(box.w * 0.5, box.h * 0.52), 2200);
-    return () => clearInterval(t);
-  }, [running, thumbs.length, box.w, box.h, spawn]);
-
-  const leftWell = { x: box.w * 0.28, y: box.h * 0.62 };
-  const rightWell = { x: box.w * 0.72, y: box.h * 0.62 };
-
   return (
     <Pressable
       style={styles.pool}
       onLayout={(e) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
       onPressIn={(e) => {
+        if (!running) return;
         const x = e.nativeEvent.locationX;
         const y = e.nativeEvent.locationY;
         const id = typeof e.nativeEvent.identifier === "number" ? e.nativeEvent.identifier : 0;
@@ -270,6 +421,7 @@ function Pool({
         thumbsRef.current.set(id, thumb);
         setThumbs([...thumbsRef.current.values()]);
         spawn(x, y);
+        tapHoldPulse(sideOf(x), { on: hapticOn, volume: hapticVol });
         addSide(sideOf(x));
       }}
       onPressOut={() => {
@@ -277,50 +429,35 @@ function Pool({
         setThumbs([]);
         clearSides();
       }}
-      onTouchStart={onStart}
+      onTouchStart={(e) => {
+        if (!running) return;
+        onStart(e);
+      }}
       onTouchMove={onMove}
       onTouchEnd={onEnd}
       onTouchCancel={onEnd}
     >
-      <Animated.Image
-        source={imgSource(photos.mistyLake)}
-        resizeMode="cover"
-        pointerEvents="none"
-        style={[styles.water, { transform: [{ scale: zoom }, { translateX: shift }, { translateY: -18 }] }]}
-      />
+      {video ? (
+        <View pointerEvents="none" style={[styles.water, { transform: [{ scale: 1.08 }] }]}>
+          <LoopVideo source={video} poster={photo} />
+        </View>
+      ) : (
+        <Animated.Image
+          source={imgSource(photo)}
+          resizeMode="cover"
+          style={[styles.water, { transform: [{ scale: zoom }, { translateX: shift }, { translateY: -18 }] }]}
+        />
+      )}
       <LinearGradient
         pointerEvents="none"
         colors={["rgba(244,236,220,0.18)", "rgba(231,238,242,0.04)", "rgba(125,163,179,0.12)"]}
         style={StyleSheet.absoluteFill}
       />
       <View pointerEvents="none" style={styles.rim} />
-      <ThumbWell x={leftWell.x} y={leftWell.y} label="L" active={thumbs.some((t) => t.x < box.w * 0.5)} />
-      <ThumbWell x={rightWell.x} y={rightWell.y} label="R" active={thumbs.some((t) => t.x >= box.w * 0.5)} />
-      {thumbs.map((t) => (
-        <View key={t.id} pointerEvents="none" style={[styles.contact, { left: t.x - 18, top: t.y - 18 }]} />
-      ))}
       {bursts.map((b) => (
         <RippleBurst key={b.id} x={b.x} y={b.y} onDone={() => setBursts((all) => all.filter((x) => x.id !== b.id))} />
       ))}
     </Pressable>
-  );
-}
-
-function ThumbWell({ x, y, label, active }: { x: number; y: number; label: string; active: boolean }) {
-  const a = useOscillate(active ? 1400 : 2800);
-  const scale = a.interpolate({ inputRange: [0, 1], outputRange: active ? [0.94, 1.12] : [0.96, 1.04] });
-  const opacity = a.interpolate({ inputRange: [0, 1], outputRange: active ? [0.55, 0.95] : [0.28, 0.5] });
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[
-        styles.well,
-        { left: x - 34, top: y - 34, opacity, transform: [{ scale }] },
-        active && styles.wellOn,
-      ]}
-    >
-      <Text style={styles.wellText}>{label}</Text>
-    </Animated.View>
   );
 }
 
@@ -368,6 +505,13 @@ function Ring({ x, y, delay, onDone }: { x: number; y: number; delay: number; on
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#8A9AA8", overflow: "hidden" },
+  waterPane: { flex: 2, overflow: "hidden", position: "relative" },
+  controlPane: {
+    flex: 1,
+    overflow: "hidden",
+    position: "relative",
+    justifyContent: "center",
+  },
   pool: { ...StyleSheet.absoluteFillObject, overflow: "hidden" },
   water: {
     ...StyleSheet.absoluteFillObject,
@@ -421,6 +565,14 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 13,
   },
+  photoBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(251,249,245,0.82)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   feelBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -435,23 +587,25 @@ const styles = StyleSheet.create({
   feelText: { fontFamily: fonts.bodyMed, color: colors.linen, fontSize: 13 },
   feelTextOn: { color: colors.sageDeep },
   bottomBar: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 10,
     alignItems: "center",
+    justifyContent: "center",
     gap: 8,
     zIndex: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   controlRow: {
     flexDirection: "row",
     alignItems: "center",
+    flexWrap: "wrap",
+    justifyContent: "center",
     gap: 10,
     backgroundColor: "rgba(251,249,245,0.82)",
-    borderRadius: 999,
+    borderRadius: 22,
     paddingVertical: 6,
     paddingHorizontal: 10,
   },
+  rhythmWord: { fontFamily: fonts.body, color: colors.muted, fontSize: 12, minWidth: 52 },
   hapticChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -479,34 +633,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     color: colors.ink,
     fontSize: 13,
-  },
-  well: {
-    position: "absolute",
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.42)",
-    backgroundColor: "rgba(251,249,245,0.14)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  wellOn: {
-    backgroundColor: "rgba(255,255,255,0.28)",
-    borderColor: "rgba(255,255,255,0.7)",
-  },
-  wellText: {
-    fontFamily: fonts.titleBold,
-    color: "rgba(251,249,245,0.92)",
-    fontSize: 16,
-  },
-  contact: {
-    position: "absolute",
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.28)",
-    zIndex: 2,
   },
   ring: {
     position: "absolute",

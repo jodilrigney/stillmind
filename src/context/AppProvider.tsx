@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import * as Notifications from "expo-notifications";
 import {
   CheckIn,
   DoctorNote,
@@ -6,8 +7,11 @@ import {
   JournalEntry,
   Med,
   MedLog,
+  GratitudeEntry,
+  SafetyPlan,
   Session,
   StuckPoint,
+  SupportContact,
   ThoughtRecord,
   loadJson,
   saveJson,
@@ -29,7 +33,9 @@ type Ctx = {
   thoughts: ThoughtRecord[];
   stuck: StuckPoint[];
   held: HeldItem[];
-  foodReminders: Record<string, boolean>;
+  supportContacts: SupportContact[];
+  safetyPlan: SafetyPlan;
+  gratitude: GratitudeEntry[];
   setWelcomed: () => Promise<void>;
   signIn: (session: Session) => Promise<void>;
   signOut: () => Promise<void>;
@@ -41,7 +47,9 @@ type Ctx = {
   saveThoughts: (t: ThoughtRecord[]) => Promise<void>;
   saveStuck: (s: StuckPoint[]) => Promise<void>;
   saveHeld: (h: HeldItem[]) => Promise<void>;
-  saveFoodReminders: (r: Record<string, boolean>) => Promise<void>;
+  saveSupportContacts: (contacts: SupportContact[]) => Promise<void>;
+  saveSafetyPlan: (plan: SafetyPlan) => Promise<void>;
+  saveGratitude: (entries: GratitudeEntry[]) => Promise<void>;
 };
 
 const AppContext = createContext<Ctx | null>(null);
@@ -59,11 +67,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [thoughts, setThoughts] = useState<ThoughtRecord[]>([]);
   const [stuck, setStuck] = useState<StuckPoint[]>([]);
   const [held, setHeld] = useState<HeldItem[]>([]);
-  const [foodReminders, setFoodReminders] = useState<Record<string, boolean>>({});
+  const [supportContacts, setSupportContacts] = useState<SupportContact[]>([]);
+  const [safetyPlan, setSafetyPlan] = useState<SafetyPlan>({ region: "Canada", helps: "", place: "" });
+  const [gratitude, setGratitude] = useState<GratitudeEntry[]>([]);
 
   useEffect(() => {
     (async () => {
-      const [w, s, st, c, m, ml, j, d, t, sp, h, f] = await Promise.all([
+      const [w, s, st, c, m, ml, j, d, t, sp, h, f, contacts, plan, g] = await Promise.all([
         loadJson(store.keys.welcome, false),
         loadJson<Session | null>(store.keys.session, null),
         loadJson<Settings>(store.keys.settings, { haptics: true, keepName: "" }),
@@ -76,6 +86,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         loadJson<StuckPoint[]>(store.keys.stuckPoints, []),
         loadJson<HeldItem[]>(store.keys.held, []),
         loadJson<Record<string, boolean>>(store.keys.foodReminders, {}),
+        loadJson<SupportContact[]>(store.keys.supportContacts, []),
+        loadJson<SafetyPlan>(store.keys.safetyPlan, { region: "Canada", helps: "", place: "" }),
+        loadJson<GratitudeEntry[]>(store.keys.gratitude, []),
       ]);
       setWelcomedState(w);
       setSession(s);
@@ -88,7 +101,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setThoughts(t);
       setStuck(sp);
       setHeld(h);
-      setFoodReminders(f);
+      setSupportContacts(contacts);
+      setSafetyPlan(plan);
+      setGratitude(g);
+      if (Object.keys(f).length) {
+        await Promise.all(
+          Object.keys(f).map((id) => Notifications.cancelScheduledNotificationAsync(id).catch(() => {}))
+        );
+        await saveJson(store.keys.foodReminders, {});
+      }
       setReady(true);
     })();
   }, []);
@@ -107,7 +128,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       thoughts,
       stuck,
       held,
-      foodReminders,
+      supportContacts,
+      safetyPlan,
+      gratitude,
       setWelcomed: async () => {
         setWelcomedState(true);
         await saveJson(store.keys.welcome, true);
@@ -153,9 +176,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setHeld(h);
         await saveJson(store.keys.held, h);
       },
-      saveFoodReminders: async (r) => {
-        setFoodReminders(r);
-        await saveJson(store.keys.foodReminders, r);
+      saveSupportContacts: async (contacts) => {
+        setSupportContacts(contacts);
+        await saveJson(store.keys.supportContacts, contacts);
+      },
+      saveSafetyPlan: async (plan) => {
+        setSafetyPlan(plan);
+        await saveJson(store.keys.safetyPlan, plan);
+      },
+      saveGratitude: async (entries) => {
+        setGratitude(entries);
+        await saveJson(store.keys.gratitude, entries);
       },
     }),
     [
@@ -171,7 +202,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       thoughts,
       stuck,
       held,
-      foodReminders,
+      supportContacts,
+      safetyPlan,
+      gratitude,
     ]
   );
 

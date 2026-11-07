@@ -12,6 +12,10 @@ const KEYS = {
   stuckPoints: "still.stuck",
   held: "still.held",
   foodReminders: "still.foodReminders",
+  supportContacts: "still.supportContacts",
+  safetyPlan: "still.safetyPlan",
+  gratitude: "still.gratitude",
+  lightenGuide: "still.lightenGuide",
   settings: "still.settings",
 };
 
@@ -70,9 +74,11 @@ export type ThoughtRecord = {
   situation: string;
   thought: string;
   emotion: string;
+  pattern?: string;
   evidenceFor: string;
   evidenceAgainst: string;
   balanced: string;
+  emotionAfter?: string;
 };
 
 export type StuckPoint = {
@@ -81,12 +87,48 @@ export type StuckPoint = {
   belief: string;
   challenge: string;
   responsibility: string;
+  theme?: string;
+  situation?: string;
+  emotion?: string;
+  beliefBefore?: string;
+  evidenceFor?: string;
+  evidenceAgainst?: string;
+  habitOrFact?: string;
+  missingInfo?: string;
+  languageCheck?: string;
+  feelingOrFact?: string;
+  patterns?: string;
+  beliefAfter?: string;
+  emotionAfter?: string;
 };
 
 export type HeldItem = {
   id: string;
   text: string;
   date: string;
+};
+
+export type SupportContact = {
+  id: string;
+  kind: "provider" | "safety";
+  name: string;
+  role: string;
+  organization: string;
+  phone: string;
+  email: string;
+  notes: string;
+};
+
+export type SafetyPlan = {
+  region: "Canada" | "United States";
+  helps: string;
+  place: string;
+};
+
+export type GratitudeEntry = {
+  id: string;
+  date: string;
+  text: string;
 };
 
 export async function loadJson<T>(key: string, fallback: T): Promise<T> {

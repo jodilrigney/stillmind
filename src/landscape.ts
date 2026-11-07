@@ -71,3 +71,28 @@ export function useLandscapeOnFocus() {
     }, [])
   );
 }
+
+/** Portrait by default; follows the device when the user turns the phone. */
+export function useRotatableOnFocus() {
+  useFocusEffect(
+    useCallback(() => {
+      setAppLandscape(false);
+      try {
+        settle(ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.DEFAULT));
+      } catch {
+        unlockLandscape();
+      }
+      if (Platform.OS === "web") {
+        try {
+          screen?.orientation?.unlock?.();
+        } catch {
+          /* ignore */
+        }
+      }
+      return () => {
+        setAppLandscape(false);
+        unlockLandscape();
+      };
+    }, [])
+  );
+}

@@ -1,26 +1,27 @@
+import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, ImageBackground, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { playAsset, playBowlTone, playRemote, setToneVolume, stopTone } from "../../src/audio";
+import { Animated, ImageBackground, Pressable, StyleSheet, Text, View } from "react-native";
+import { playFrequencyPad, setFrequencyPadVolume, stopFrequencyPad, stopTone } from "../../src/audio";
 import { ScreenHeader } from "../../src/components/ui";
 import { MEDITATIONS } from "../../src/data";
-import { imgSource, images, sounds } from "../../src/images";
+import { ImageKey, imgSource, images } from "../../src/images";
 import { useSessionAwake } from "../../src/keepAwake";
+import { speakMeditationClip, stopSpeak } from "../../src/speak";
 import { colors, fonts } from "../../src/theme";
-
-type SoundMode = "forest" | "bowl" | "off";
 
 export default function MeditationSession() {
   useSessionAwake();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const m = MEDITATIONS.find((x) => x.id === id) || MEDITATIONS[0];
+  const sessionId = Array.isArray(id) ? id[0] : id;
+  const m = MEDITATIONS.find((x) => x.id === sessionId) || MEDITATIONS[0];
   const [line, setLine] = useState(0);
   const [left, setLeft] = useState(m.minutes * 60);
   const [on, setOn] = useState(true);
-  const [soundMode, setSoundMode] = useState<SoundMode>("forest");
-  const [volume, setVolume] = useState(0.45);
-  const [url, setUrl] = useState(m.audioUrl);
+  const [musicOn, setMusicOn] = useState(true);
+  const [voiceOn, setVoiceOn] = useState(false);
+  const [volume, setVolume] = useState(0.32);
   const ken = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -35,58 +36,112 @@ export default function MeditationSession() {
   }, [ken]);
 
   useEffect(() => {
+    setLine(0);
+    setLeft(m.minutes * 60);
+  }, [m.id, m.minutes]);
+
+  useEffect(() => {
     if (!on) return;
-    const t = setInterval(() => setLine((l) => (l + 1) % m.lines.length), 8000);
+    const t = setInterval(() => setLine((l) => (l + 1) % m.lines.length), m.lineSeconds * 1000);
     const c = setInterval(() => setLeft((n) => Math.max(0, n - 1)), 1000);
     return () => {
       clearInterval(t);
       clearInterval(c);
     };
-  }, [on, m.lines.length]);
+  }, [on, m.lines.length, m.lineSeconds]);
 
   useFocusEffect(
     useCallback(() => {
-      if (!on || soundMode === "off") {
+      stopSpeak();
+      if (!on || !musicOn) {
         stopTone();
+        stopFrequencyPad();
         return () => {
           stopTone();
+          stopFrequencyPad();
+          stopSpeak();
         };
       }
-      const start = async () => {
-        try {
-          if (url.trim()) await playRemote(url.trim(), volume);
-          else if (soundMode === "forest") await playAsset(sounds.forest, volume);
-          else await playBowlTone({ freq: m.bowlFreq, volume });
-        } catch {
-          if (soundMode === "forest") await playAsset(sounds.forest, volume).catch(() => {});
-          else await playBowlTone({ freq: m.bowlFreq, volume }).catch(() => {});
-        }
-      };
-      start();
+      playFrequencyPad(m.musicId, volume).catch(() => {});
       return () => {
         stopTone();
+        stopFrequencyPad();
+        stopSpeak();
       };
-    }, [on, soundMode, url, volume, m.bowlFreq])
+    }, [on, musicOn, m.musicId])
   );
 
   useEffect(() => {
-    setToneVolume(volume);
+    setFrequencyPadVolume(volume);
   }, [volume]);
+
+  useEffect(() => {
+    if (!on || !voiceOn) {
+      stopSpeak();
+      return;
+    }
+    speakMeditationClip(`${m.id}-${line}`, 0.9).catch(() => {});
+  }, [line, on, voiceOn, m.id]);
 
   const mm = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.linen, overflow: "hidden" }}>
       <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale: ken }] }]}>
-        <ImageBackground source={imgSource(images[m.imageKey])} style={{ flex: 1 }} />
+        <ImageBackground
+          source={imgSource(images[m.imageKey as ImageKey])}
+          style={{ flex: 1 }}
+          imageStyle={{ width: "100%", height: "100%" }}
+          resizeMode="cover"
+        />
       </Animated.View>
-      <LinearGradient colors={["rgba(231,238,242,0.22)", "rgba(244,240,230,0.38)", "rgba(244,240,230,0.82)"]} style={{ flex: 1 }}>
+      <LinearGradient colors={["rgba(244,240,230,0.78)", "rgba(244,240,230,0.18)", "rgba(244,240,230,0.62)"]} style={{ flex: 1 }}>
         <ScreenHeader title="MEDITATE" subtitle={m.title} />
         <View style={{ flex: 1, justifyContent: "center", padding: 24 }}>
-          <Text style={styles.time}>{mm}</Text>
-          <Text style={styles.line}>{m.lines[line]}</Text>
+          <View style={styles.script}>
+            <Text style={styles.theme}>{m.theme}</Text>
+            <Text style={styles.time}>{mm}</Text>
+            <Text style={styles.line}>{m.lines[line]}</Text>
+          </View>
         </View>
         <View style={styles.dock}>
+          <View style={styles.toggleRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={on ? "Pause" : "Play"}
+              style={[styles.play, !on && styles.playOff]}
+              onPress={() => setOn((v) => !v)}
+            >
+              <Ionicons name={on ? "pause" : "play"} size={16} color={on ? colors.linen : colors.sageDeep} />
+              <Text style={[styles.playText, !on && styles.playTextOff]}>{on ? "Pause" : "Begin"}</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: musicOn }}
+              style={[styles.toggle, musicOn && styles.toggleOn]}
+              onPress={() => setMusicOn((v) => !v)}
+            >
+              <Ionicons name={musicOn ? "musical-notes" : "musical-notes-outline"} size={16} color={musicOn ? colors.sageDeep : colors.muted} />
+              <Text style={[styles.toggleText, musicOn && styles.toggleTextOn]}>Music</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: voiceOn }}
+              style={[styles.toggle, voiceOn && styles.toggleOn]}
+              onPress={() => {
+                if (voiceOn) {
+                  setVoiceOn(false);
+                  stopSpeak();
+                  return;
+                }
+                setVoiceOn(true);
+                if (on) speakMeditationClip(`${m.id}-${line}`, 0.9).catch(() => {});
+              }}
+            >
+              <Ionicons name={voiceOn ? "mic" : "mic-off-outline"} size={16} color={voiceOn ? colors.sageDeep : colors.muted} />
+              <Text style={[styles.toggleText, voiceOn && styles.toggleTextOn]}>Voice</Text>
+            </Pressable>
+          </View>
           <View style={styles.sliderRow}>
             <Text style={styles.lab}>Volume</Text>
             <Pressable onPress={() => setVolume(Math.max(0, volume - 0.1))} style={styles.nudge}>
@@ -99,32 +154,6 @@ export default function MeditationSession() {
               <Text>+</Text>
             </Pressable>
           </View>
-          <TextInput
-            value={url}
-            onChangeText={setUrl}
-            placeholder="Optional audio link (stream or file URL)"
-            placeholderTextColor={colors.muted}
-            autoCapitalize="none"
-            style={styles.input}
-          />
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            <Pressable accessibilityRole="button" accessibilityLabel={on ? "Pause" : "Play"} style={styles.chip} onPress={() => setOn((v) => !v)}>
-              <Text style={styles.chipText}>{on ? "Pause" : "Play"}</Text>
-            </Pressable>
-            {(["forest", "bowl", "off"] as const).map((mode) => (
-              <Pressable
-                key={mode}
-                accessibilityRole="button"
-                accessibilityLabel={mode === "forest" ? "Forest" : mode === "bowl" ? "Bowl" : "Off"}
-                style={[styles.chip, soundMode === mode && styles.chipOn]}
-                onPress={() => setSoundMode(mode)}
-              >
-                <Text style={[styles.chipText, soundMode === mode && styles.chipOnText]}>
-                  {mode === "forest" ? "Forest" : mode === "bowl" ? "Bowl" : "Off"}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
         </View>
       </LinearGradient>
     </View>
@@ -132,6 +161,13 @@ export default function MeditationSession() {
 }
 
 const styles = StyleSheet.create({
+  script: {
+    backgroundColor: "rgba(251,249,245,0.92)",
+    borderRadius: 24,
+    paddingVertical: 22,
+    paddingHorizontal: 20,
+  },
+  theme: { fontFamily: fonts.bodyMed, color: colors.ink, textAlign: "center", fontSize: 14, marginBottom: 8 },
   time: { fontFamily: fonts.titleLight, fontSize: 48, color: colors.ink, textAlign: "center" },
   line: {
     fontFamily: fonts.titleBold,
@@ -146,22 +182,37 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(251,249,245,0.78)",
     borderRadius: 22,
     padding: 14,
-    gap: 10,
+    gap: 12,
   },
+  toggleRow: { flexDirection: "row", gap: 8 },
+  play: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    flex: 1.1,
+    backgroundColor: colors.sage,
+    borderRadius: 16,
+    paddingVertical: 12,
+  },
+  playOff: { backgroundColor: colors.sageSoft },
+  playText: { fontFamily: fonts.bodyBold, color: colors.linen },
+  playTextOff: { color: colors.sageDeep },
+  toggle: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+    borderRadius: 16,
+    paddingVertical: 9,
+    backgroundColor: "rgba(237,230,216,0.72)",
+  },
+  toggleOn: { backgroundColor: colors.sageSoft },
+  toggleText: { fontFamily: fonts.bodyMed, color: colors.muted, fontSize: 11 },
+  toggleTextOn: { color: colors.sageDeep },
   sliderRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   lab: { fontFamily: fonts.bodyMed, color: colors.ink, width: 64 },
   track: { flex: 1, height: 10, borderRadius: 5, backgroundColor: colors.creamDeep, overflow: "hidden" },
   fill: { height: 10, backgroundColor: colors.sage },
   nudge: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.creamDeep, alignItems: "center", justifyContent: "center" },
-  input: {
-    borderRadius: 14,
-    backgroundColor: colors.linen,
-    padding: 10,
-    fontFamily: fonts.body,
-    color: colors.ink,
-  },
-  chip: { flex: 1, backgroundColor: colors.sageSoft, borderRadius: 16, padding: 12, alignItems: "center" },
-  chipOn: { backgroundColor: colors.sage },
-  chipText: { fontFamily: fonts.bodyMed, color: colors.ink },
-  chipOnText: { color: colors.linen },
 });

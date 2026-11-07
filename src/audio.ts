@@ -149,22 +149,42 @@ type WebBowl = {
   stop: () => void;
   freq: number;
   engine?: number;
+  voicing?: HarmonyVoicing;
 };
 
+/** Tuned to calm.mp3’s measured peaks: lower Em fifth on left, G/D on right. */
+export const HARMONY_CHORD = {
+  L: [164.6, 247.0], // E3 + B3 — lower
+  R: [195.9, 293.7], // G3 + D4 — higher home fifth
+} as const;
+
 export const HARMONY_PITCH = {
-  L: 131,
-  R: 196,
+  L: HARMONY_CHORD.L[0],
+  R: HARMONY_CHORD.R[0],
 } as const;
 
 export const HARMONY_NOTES = {
-  L: "C3",
-  R: "G3",
+  L: "E·B",
+  R: "G·D",
 } as const;
+
+export type HarmonyVoicing = "single" | "dyad";
+
+let harmonyVoicing: HarmonyVoicing = "dyad";
+
+export function getHarmonyVoicing() {
+  return harmonyVoicing;
+}
+
+function harmonyChord(side: "L" | "R"): readonly number[] {
+  const full = HARMONY_CHORD[side];
+  return harmonyVoicing === "single" ? [full[0]] : full;
+}
 
 const HARMONY_ATTACK = 0.45;
 const HARMONY_FADE = 3.4;
-const HARMONY_LEVEL = 0.5;
-const HARMONY_ENGINE = 5;
+const HARMONY_LEVEL = 0.44;
+const HARMONY_ENGINE = 11;
 
 const CALM_BOWL_MODES = [
   { r: 1, a: 0.44, beat: 0.28 },
@@ -552,27 +572,37 @@ export function strikeBowl(strength = 0.7) {
   playLayered(strikeUriCache, 0.42 * strength).catch(() => {});
 }
 
-function makeCalmBowlWavUri(freq: number, volume = 0.14) {
+function makeCalmBowlWavUri(freqs: number | readonly number[], volume = 0.14) {
+  const roots = (Array.isArray(freqs) ? freqs : [freqs]) as number[];
   return toWavUri((view, n, sampleRate) => {
     const seconds = n / sampleRate;
     const fade = 1.2;
     for (let i = 0; i < n; i++) {
       const t = i / sampleRate;
       let s = 0;
-      for (const p of CALM_BOWL_MODES) {
-        const f = freq * p.r;
-        const env = 0.88 + 0.12 * Math.sin(2 * Math.PI * p.beat * t);
-        s += p.a * env * Math.sin(2 * Math.PI * f * t);
-      }
+      roots.forEach((freq, ri) => {
+        const amp = ri === 0 ? 1 : 0.72;
+        for (const p of CALM_BOWL_MODES) {
+          const f = freq * p.r;
+          const env = 0.88 + 0.12 * Math.sin(2 * Math.PI * p.beat * t);
+          s += p.a * amp * env * Math.sin(2 * Math.PI * f * t);
+        }
+      });
       const edge = Math.min(1, t / fade, (seconds - t) / fade);
-      const sample = s * 0.22 * volume * edge;
+      const sample = s * 0.18 * volume * edge;
       view.setInt16(44 + i * 4, Math.max(-1, Math.min(1, sample * 0.9)) * 32767, true);
       view.setInt16(44 + i * 4 + 2, Math.max(-1, Math.min(1, sample)) * 32767, true);
     }
   }, 10);
 }
 
-function wireBowlVoice(ctx: AudioContext, dest: AudioNode, freq: number, stoppers: Array<() => void>) {
+function wireBowlVoice(
+  ctx: AudioContext,
+  dest: AudioNode,
+  freq: number,
+  stoppers: Array<() => void>,
+  amp = 1
+) {
   for (const p of CALM_BOWL_MODES) {
     const f = freq * p.r;
     const osc = ctx.createOscillator();
@@ -582,7 +612,7 @@ function wireBowlVoice(ctx: AudioContext, dest: AudioNode, freq: number, stopper
     osc.frequency.value = f;
     oscB.frequency.value = f * 1.001;
     const g = ctx.createGain();
-    g.gain.value = p.a * 0.2;
+    g.gain.value = p.a * 0.2 * amp;
     const lfo = ctx.createOscillator();
     lfo.frequency.value = p.beat;
     const lfoG = ctx.createGain();
@@ -608,7 +638,11 @@ function wireBowlVoice(ctx: AudioContext, dest: AudioNode, freq: number, stopper
 async function ensureHarmonyEngine() {
   const slot = bag();
   if (slot.web?.voices) {
-    if (slot.web.freq === HARMONY_PITCH.L && slot.web.engine === HARMONY_ENGINE) {
+    if (
+      slot.web.freq === HARMONY_PITCH.L &&
+      slot.web.engine === HARMONY_ENGINE &&
+      slot.web.voicing === harmonyVoicing
+    ) {
       if (slot.web.ctx.state === "suspended") await slot.web.ctx.resume();
       return slot.web;
     }
@@ -623,20 +657,20 @@ async function ensureHarmonyEngine() {
   master.connect(ctx.destination);
   const stoppers: Array<() => void> = [];
 
-  const makeVoice = (freq: number, pan: number): HarmonyVoice => {
+  const makeVoice = (freqs: readonly number[], pan: number): HarmonyVoice => {
     const gain = ctx.createGain();
     gain.gain.value = 0.0001;
     const panner = ctx.createStereoPanner();
     panner.pan.value = pan;
     gain.connect(panner);
     panner.connect(master);
-    wireBowlVoice(ctx, gain, freq, stoppers);
+    freqs.forEach((freq, i) => wireBowlVoice(ctx, gain, freq, stoppers, i === 0 ? 1 : 0.72));
     return { gain, held: false };
   };
 
   const voices = {
-    L: makeVoice(HARMONY_PITCH.L, -0.38),
-    R: makeVoice(HARMONY_PITCH.R, 0.38),
+    L: makeVoice(harmonyChord("L"), -0.38),
+    R: makeVoice(harmonyChord("R"), 0.38),
   };
 
   const stop = () => {
@@ -652,7 +686,15 @@ async function ensureHarmonyEngine() {
     }, 160);
   };
 
-  slot.web = { ctx, master, voices, stop, freq: HARMONY_PITCH.L, engine: HARMONY_ENGINE };
+  slot.web = {
+    ctx,
+    master,
+    voices,
+    stop,
+    freq: HARMONY_PITCH.L,
+    engine: HARMONY_ENGINE,
+    voicing: harmonyVoicing,
+  };
   if (ctx.state === "suspended") await ctx.resume();
   return slot.web;
 }
@@ -668,17 +710,20 @@ export async function holdHarmony(side: "L" | "R") {
     g.cancelScheduledValues(now);
     g.setValueAtTime(Math.max(0.0001, g.value), now);
     g.linearRampToValueAtTime(HARMONY_LEVEL, now + HARMONY_ATTACK);
-    const osc = engine.ctx.createOscillator();
-    const strikeG = engine.ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.value = HARMONY_PITCH[side];
-    strikeG.gain.setValueAtTime(0.0001, now);
-    strikeG.gain.exponentialRampToValueAtTime(0.08, now + 0.04);
-    strikeG.gain.exponentialRampToValueAtTime(0.0001, now + 2.8);
-    osc.connect(strikeG);
-    strikeG.connect(engine.master);
-    osc.start(now);
-    osc.stop(now + 2.9);
+    harmonyChord(side).forEach((freq, i) => {
+      const osc = engine.ctx.createOscillator();
+      const strikeG = engine.ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const peak = i === 0 ? 0.08 : 0.055;
+      strikeG.gain.setValueAtTime(0.0001, now);
+      strikeG.gain.exponentialRampToValueAtTime(peak, now + 0.04);
+      strikeG.gain.exponentialRampToValueAtTime(0.0001, now + 2.8);
+      osc.connect(strikeG);
+      strikeG.connect(engine.master);
+      osc.start(now);
+      osc.stop(now + 2.9);
+    });
     return;
   }
   await holdNativeHarmony(side);
@@ -731,6 +776,23 @@ function clearNativeFade(side: "L" | "R") {
   }
 }
 
+export function setHarmonyVoicing(mode: HarmonyVoicing) {
+  if (harmonyVoicing === mode) return;
+  harmonyVoicing = mode;
+  stopWebBowl();
+  (["L", "R"] as const).forEach((side) => {
+    clearNativeFade(side);
+    const sound = nativeHarmony[side].sound;
+    if (sound) {
+      bag().sounds.delete(sound);
+      sound.stopAsync().catch(() => {});
+      sound.unloadAsync().catch(() => {});
+    }
+    nativeHarmony[side].sound = undefined;
+    nativeHarmony[side].vol = 0;
+  });
+}
+
 function rampNativeHarmony(side: "L" | "R", target: number, ms: number) {
   clearNativeFade(side);
   const slot = nativeHarmony[side];
@@ -758,7 +820,7 @@ async function holdNativeHarmony(side: "L" | "R") {
   } catch {}
   const slot = nativeHarmony[side];
   if (!slot.sound) {
-    const uri = makeCalmBowlWavUri(HARMONY_PITCH[side], 0.14);
+    const uri = makeCalmBowlWavUri(harmonyChord(side), 0.14);
     const { sound } = await Audio.Sound.createAsync({ uri }, { isLooping: true, volume: 0, shouldPlay: true });
     slot.sound = sound;
     bag().sounds.add(sound);
@@ -770,14 +832,16 @@ function fadeNativeHarmony(side: "L" | "R", target: number, ms: number) {
   rampNativeHarmony(side, target, ms);
 }
 
-export type BedKind = "stream" | "wind";
+export type BedKind = "stream" | "forest" | "wind" | "calm";
 
 const BED_SR = 22050;
 const BED_SECONDS = 10;
-const BED_REV = 11;
+const BED_REV = 18;
 const BED_ASSETS: Record<BedKind, number> = {
-  stream: require("../assets/audio/quiet-forest.mp3"),
+  stream: require("../assets/audio/place-of-calm.mp3"),
+  forest: require("../assets/audio/forest.mp3"),
   wind: require("../assets/audio/forest-wind.mp3"),
+  calm: require("../assets/audio/quiet-forest.mp3"),
 };
 
 type BedState = {
@@ -911,6 +975,10 @@ function makeAmbientSamples(kind: BedKind, sr = BED_SR, seconds = BED_SECONDS) {
       const swell = 0.92 + 0.08 * Math.sin((2 * Math.PI * 0.04 * i) / sr);
       out[i] = (earth[i] * 0.55 + wind[i] * 0.35 + canopy[i] * 0.1) * swell;
     }
+  } else if (kind === "forest" || kind === "calm") {
+    const air = band(pinkBuf(n, 61), 80, 900, sr);
+    const canopy = band(pinkBuf(n, 409), 300, 1600, sr);
+    for (let i = 0; i < n; i++) out[i] = air[i] * 0.7 + canopy[i] * 0.3;
   } else {
     const air = band(pinkBuf(n, 23), 140, 1050, sr);
     const canopy = band(pinkBuf(n, 811), 450, 1900, sr);
@@ -972,8 +1040,22 @@ function applyBedVolNow(v: number) {
   if (bed.sound) bed.sound.setVolumeAsync(bed.vol).catch(() => {});
 }
 
-export function setBedPan(progressOrPan: number) {
-  bed.pan = clampPan(progressOrPan);
+export function setBedPan(progressOrPan: number, ms = 0) {
+  const target = clampPan(progressOrPan);
+  if (ms > 0 && bed.panner && bed.ctx) {
+    try {
+      const now = bed.ctx.currentTime;
+      bed.panner.pan.cancelScheduledValues(now);
+      bed.panner.pan.setValueAtTime(bed.panner.pan.value, now);
+      bed.panner.pan.linearRampToValueAtTime(target, now + ms / 1000);
+    } catch {
+      bed.panner.pan.value = target;
+    }
+    bed.pan = target;
+    if (bed.sound) bed.sound.setPanAsync(target).catch(() => {});
+    return;
+  }
+  bed.pan = target;
   applyBedPan();
 }
 
@@ -1025,6 +1107,34 @@ async function stopNativeBed() {
     await sound.stopAsync();
     await sound.unloadAsync();
   } catch {}
+}
+
+export async function pauseBed() {
+  if (bed.sound) {
+    try {
+      await bed.sound.pauseAsync();
+    } catch {}
+    return;
+  }
+  if (bed.ctx && bed.source && bed.ctx.state === "running") {
+    try {
+      await bed.ctx.suspend();
+    } catch {}
+  }
+}
+
+export async function resumeBed() {
+  if (bed.sound) {
+    try {
+      await bed.sound.playAsync();
+    } catch {}
+    return;
+  }
+  if (bed.ctx && bed.ctx.state === "suspended") {
+    try {
+      await bed.ctx.resume();
+    } catch {}
+  }
 }
 
 export function stopBed() {
@@ -1099,7 +1209,8 @@ async function startWebBed(kind: BedKind, volume: number) {
   if (bed.filter) {
     bed.filter.type = "lowpass";
     bed.filter.Q.value = 0.45;
-    bed.filter.frequency.value = kind === "stream" ? 1300 : 1500;
+    bed.filter.frequency.value =
+      kind === "stream" ? 12000 : kind === "forest" || kind === "calm" ? 4200 : 1800;
   }
   stopWebSource();
   const source = ctx.createBufferSource();
@@ -1176,4 +1287,155 @@ export async function playPannedBed(kind: BedKind, volume = 0.34) {
     }
   }
   await startNativeBed(kind, volume);
+}
+
+/** Layered meditative beds centered on each solfeggio Hz (pads + soft phrases, not pure tones). */
+export const FREQUENCY_CLIPS = [
+  { id: "174", hz: 174, title: "174 Hz", heals: "Ease the body", note: "Comfort & grounding" },
+  { id: "396", hz: 396, title: "396 Hz", heals: "Soften fear", note: "Release & settle" },
+  { id: "528", hz: 528, title: "528 Hz", heals: "Heart & repair", note: "Love frequency" },
+  { id: "639", hz: 639, title: "639 Hz", heals: "Connection", note: "Heart relationships" },
+  { id: "741", hz: 741, title: "741 Hz", heals: "Clarity", note: "Clear expression" },
+  { id: "852", hz: 852, title: "852 Hz", heals: "Inner sight", note: "Quiet awareness" },
+] as const;
+
+export type FrequencyClipId = (typeof FREQUENCY_CLIPS)[number]["id"];
+
+/** Siarhei Korbut — Meditation Frequencies (Jamendo / CC BY-NC-ND 3.0). */
+const FREQ_ASSETS: Record<FrequencyClipId, number> = {
+  "174": require("../assets/audio/freq/174.mp3"),
+  "396": require("../assets/audio/freq/396.mp3"),
+  "528": require("../assets/audio/freq/528.mp3"),
+  "639": require("../assets/audio/freq/639.mp3"),
+  "741": require("../assets/audio/freq/741.mp3"),
+  "852": require("../assets/audio/freq/852.mp3"),
+};
+
+let freqSound: Audio.Sound | null = null;
+let webFreq: { pause: () => void; removeAttribute: (name: string) => void; volume: number } | null = null;
+
+export async function stopFrequencyPad() {
+  if (webFreq) {
+    const el = webFreq;
+    webFreq = null;
+    el.pause();
+    el.removeAttribute("src");
+  }
+  if (freqSound) {
+    const s = freqSound;
+    freqSound = null;
+    try {
+      await s.stopAsync();
+      await s.unloadAsync();
+    } catch {}
+  }
+}
+
+export async function playFrequencyPad(idOrHz: FrequencyClipId | number, volume = 0.28) {
+  await stopFrequencyPad();
+  const vol = Math.max(0.04, Math.min(0.7, volume));
+  const clip =
+    typeof idOrHz === "number"
+      ? FREQUENCY_CLIPS.find((c) => c.hz === idOrHz)
+      : FREQUENCY_CLIPS.find((c) => c.id === idOrHz);
+  if (!clip) return;
+  const asset = FREQ_ASSETS[clip.id];
+
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    const resolved = Image.resolveAssetSource(asset);
+    const uri = resolved?.uri || `/assets/?unstable_path=./assets/audio/freq/${clip.id}.mp3`;
+    const el = new window.Audio(uri);
+    el.loop = true;
+    el.volume = vol;
+    webFreq = el;
+    try {
+      await el.play();
+    } catch {}
+    return;
+  }
+
+  try {
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+    });
+  } catch {}
+  const { sound } = await Audio.Sound.createAsync(asset, {
+    isLooping: true,
+    volume: vol,
+    shouldPlay: true,
+  });
+  freqSound = sound;
+}
+
+export function setFrequencyPadVolume(volume: number) {
+  const vol = Math.max(0, Math.min(0.7, volume));
+  if (webFreq) webFreq.volume = vol;
+  if (freqSound) freqSound.setVolumeAsync(vol).catch(() => {});
+}
+
+/** Zen beds that stay in Em/G so Tri-Calm bowls remain consonant all the way through. */
+export const RHYTHM_BEDS = [
+  { id: "still", title: "Still", source: require("../assets/audio/calm.mp3") },
+  { id: "ember", title: "Ember", source: require("../assets/audio/zen-ember.wav") },
+] as const;
+
+export type RhythmBedId = (typeof RHYTHM_BEDS)[number]["id"];
+
+let rhythmSound: Audio.Sound | null = null;
+let rhythmRate = 1;
+let rhythmVol = 0.2;
+let rhythmBedId: RhythmBedId = "still";
+
+export async function stopRhythmBed() {
+  if (rhythmSound) {
+    const s = rhythmSound;
+    rhythmSound = null;
+    try {
+      await s.stopAsync();
+      await s.unloadAsync();
+    } catch {}
+  }
+}
+
+export async function playRhythmBed(volume = 0.26, rate = 1, bedId: RhythmBedId = rhythmBedId) {
+  await stopRhythmBed();
+  rhythmVol = Math.max(0.04, Math.min(0.65, volume));
+  // Keep near natural speed — heavy time-stretch makes the bed waver.
+  rhythmRate = Math.max(0.92, Math.min(1.08, rate));
+  rhythmBedId = RHYTHM_BEDS.some((b) => b.id === bedId) ? bedId : "still";
+  const asset = RHYTHM_BEDS.find((b) => b.id === rhythmBedId)?.source ?? RHYTHM_BEDS[0].source;
+  try {
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+    });
+  } catch {}
+  const { sound } = await Audio.Sound.createAsync(asset, {
+    isLooping: true,
+    volume: rhythmVol,
+    shouldPlay: true,
+    rate: rhythmRate,
+    shouldCorrectPitch: true,
+  });
+  rhythmSound = sound;
+  try {
+    await sound.setRateAsync(rhythmRate, true);
+  } catch {}
+}
+
+export async function setRhythmRate(rate: number) {
+  rhythmRate = Math.max(0.92, Math.min(1.08, rate));
+  if (rhythmSound) {
+    try {
+      await rhythmSound.setRateAsync(rhythmRate, true);
+    } catch {}
+  }
+}
+
+export function setRhythmVolume(volume: number) {
+  rhythmVol = Math.max(0, Math.min(0.65, volume));
+  if (rhythmSound) rhythmSound.setVolumeAsync(rhythmVol).catch(() => {});
 }

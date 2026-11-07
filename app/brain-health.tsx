@@ -1,71 +1,146 @@
-import * as Notifications from "expo-notifications";
-import { Image, StyleSheet, Switch, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import { Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Card, PrivacyBadge, SessionShell } from "../src/components/ui";
-import { useApp } from "../src/context/AppProvider";
-import { FOODS } from "../src/data";
-import { imgSource, images } from "../src/images";
+import { BrainHealthCategory, FOODS } from "../src/data";
+import { ImageKey, imgSource, images } from "../src/images";
 import { colors, fonts } from "../src/theme";
 
-async function scheduleDaily(id: string, title: string) {
-  try {
-    await Notifications.requestPermissionsAsync();
-    await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
-    await Notifications.scheduleNotificationAsync({
-      identifier: id,
-      content: {
-        title: "StillMind · a small nourish reminder",
-        body: title,
-      },
-      trigger: { hour: 12, minute: 0, repeats: true, channelId: "still" },
-    });
-  } catch {}
-}
+const FILTERS: Array<"All" | BrainHealthCategory> = ["All", "Food", "Nutrient", "Herb"];
 
 export default function BrainHealth() {
-  const { foodReminders, saveFoodReminders } = useApp();
+  const [filter, setFilter] = useState<(typeof FILTERS)[number]>("All");
+  const [query, setQuery] = useState("");
+  const [openId, setOpenId] = useState<string | null>(null);
+  const items = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return FOODS.filter(
+      (item) =>
+        (filter === "All" || item.category === filter) &&
+        (!needle ||
+          `${item.title} ${item.support} ${item.sources}`.toLowerCase().includes(needle))
+    );
+  }, [filter, query]);
 
   return (
-    <SessionShell title="BRAIN HEALTH" subtitle="Nurture with nature">
+    <SessionShell title="BRAIN HEALTH" subtitle="Food, nutrients & herbs">
       <PrivacyBadge />
-      <Text style={styles.copy}>Food first. Supplements optional. Reminders stay local on this device.</Text>
-      {FOODS.map((f) => {
-        const on = !!foodReminders[f.id];
+      <Text style={styles.copy}>
+        Start with a varied food pattern. No single food treats a mental-health condition, and supplements or herbs can interact with medicines.
+      </Text>
+      <TextInput
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Search foods, nutrients, or herbs"
+        placeholderTextColor={colors.muted}
+        style={styles.search}
+        accessibilityLabel="Search brain health guide"
+      />
+      <View style={styles.filters}>
+        {FILTERS.map((item) => (
+          <Pressable
+            key={item}
+            accessibilityRole="button"
+            accessibilityState={{ selected: filter === item }}
+            onPress={() => setFilter(item)}
+            style={[styles.filter, filter === item && styles.filterOn]}
+          >
+            <Text style={[styles.filterText, filter === item && styles.filterTextOn]}>{item}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <Card color={colors.waterSoft} style={styles.patternCard}>
+        <Text style={styles.patternTitle}>The big picture matters most</Text>
+        <Text style={styles.patternCopy}>
+          Regular meals with vegetables, fruit, whole grains, beans, nuts, olive oil, and fish have stronger support than chasing one “perfect” ingredient.
+        </Text>
+      </Card>
+      {items.map((f) => {
+        const open = openId === f.id;
         return (
           <Card key={f.id} color={f.color} style={{ marginBottom: 14, padding: 0, overflow: "hidden" }}>
-            <Image source={imgSource(images[f.imageKey])} style={styles.img} />
+            <Image source={imgSource(images[f.imageKey as ImageKey])} style={styles.img} />
             <View style={{ padding: 14 }}>
+              <Text style={styles.category}>{f.category}</Text>
               <Text style={styles.title}>{f.title}</Text>
-              {f.points.map((p) => (
-                <Text key={p} style={styles.point}>
-                  • {p}
-                </Text>
-              ))}
-              <View style={styles.row}>
-                <Text style={styles.remind}>Daily remind</Text>
-                <Switch
-                  value={on}
-                  onValueChange={async (v) => {
-                    const next = { ...foodReminders, [f.id]: v };
-                    await saveFoodReminders(next);
-                    if (v) await scheduleDaily(f.id, f.title);
-                    else await Notifications.cancelScheduledNotificationAsync(f.id).catch(() => {});
-                  }}
-                  trackColor={{ true: colors.sage }}
-                />
-              </View>
+              <Text style={styles.support}>{f.support}</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ expanded: open }}
+                onPress={() => setOpenId(open ? null : f.id)}
+                style={styles.more}
+              >
+                <Text style={styles.moreText}>{open ? "Hide details" : "Sources, evidence & safety"}</Text>
+                <Text style={styles.moreMark}>{open ? "−" : "+"}</Text>
+              </Pressable>
+              {open ? (
+                <View style={styles.details}>
+                  <Text style={styles.detailLabel}>Try from food</Text>
+                  <Text style={styles.detailText}>{f.sources}</Text>
+                  <Text style={styles.detailLabel}>What the evidence says</Text>
+                  <Text style={styles.detailText}>{f.evidence}</Text>
+                  {f.caution ? (
+                    <View style={styles.caution}>
+                      <Text style={styles.cautionTitle}>Check first</Text>
+                      <Text style={styles.detailText}>{f.caution}</Text>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
             </View>
           </Card>
         );
       })}
+      <Text style={styles.footer}>
+        Nutrition information is educational. A clinician or registered dietitian can help with deficiencies, supplements, allergies, pregnancy, and medication interactions.
+      </Text>
     </SessionShell>
   );
 }
 
 const styles = StyleSheet.create({
   copy: { fontFamily: fonts.body, color: colors.muted, marginVertical: 12, lineHeight: 20 },
-  img: { width: "100%", height: 140 },
+  search: {
+    minHeight: 46,
+    borderRadius: 15,
+    backgroundColor: "rgba(251,249,245,0.82)",
+    paddingHorizontal: 14,
+    fontFamily: fonts.body,
+    color: colors.ink,
+    marginBottom: 10,
+  },
+  filters: { flexDirection: "row", gap: 7, marginBottom: 12 },
+  filter: {
+    flex: 1,
+    alignItems: "center",
+    borderRadius: 999,
+    paddingVertical: 8,
+    backgroundColor: "rgba(251,249,245,0.68)",
+  },
+  filterOn: { backgroundColor: colors.sageSoft },
+  filterText: { fontFamily: fonts.bodyMed, color: colors.muted, fontSize: 12 },
+  filterTextOn: { color: colors.sageDeep },
+  patternCard: { marginBottom: 14 },
+  patternTitle: { fontFamily: fonts.titleBold, color: colors.ink, fontSize: 17 },
+  patternCopy: { fontFamily: fonts.body, color: colors.muted, lineHeight: 19, marginTop: 5 },
+  img: { width: "100%", height: 130 },
+  category: { fontFamily: fonts.bodyBold, color: colors.sageDeep, fontSize: 10, letterSpacing: 1.1, textTransform: "uppercase" },
   title: { fontFamily: fonts.titleBold, fontSize: 20, color: colors.ink, marginBottom: 6 },
-  point: { fontFamily: fonts.body, color: colors.ink, marginBottom: 4 },
-  row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8 },
-  remind: { fontFamily: fonts.bodyMed, color: colors.ink },
+  support: { fontFamily: fonts.body, color: colors.ink, lineHeight: 19 },
+  more: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 10,
+    paddingTop: 9,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(61,57,51,0.09)",
+  },
+  moreText: { fontFamily: fonts.bodyMed, color: colors.sageDeep, fontSize: 12 },
+  moreMark: { fontFamily: fonts.titleBold, color: colors.sageDeep, fontSize: 18 },
+  details: { gap: 4, marginTop: 9 },
+  detailLabel: { fontFamily: fonts.bodyBold, color: colors.ink, fontSize: 12, marginTop: 5 },
+  detailText: { fontFamily: fonts.body, color: colors.muted, fontSize: 12, lineHeight: 17 },
+  caution: { backgroundColor: "rgba(244,224,212,0.62)", borderRadius: 12, padding: 10, marginTop: 5 },
+  cautionTitle: { fontFamily: fonts.bodyBold, color: "#8A5148", fontSize: 12, marginBottom: 2 },
+  footer: { fontFamily: fonts.body, color: colors.muted, fontSize: 11, lineHeight: 16, marginHorizontal: 4, marginBottom: 8 },
 });

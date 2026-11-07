@@ -2,38 +2,40 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Easing, Image, Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import Svg, { Defs, RadialGradient, Rect, Stop } from "react-native-svg";
-import { isBedPlaying, playPannedBed, setBedPan, setBedVolume, stopBed } from "../src/audio";
+import Svg, { Defs, Ellipse, RadialGradient, Rect, Stop } from "react-native-svg";
+import { isBedPlaying, pauseBed, playPannedBed, resumeBed, setBedPan, setBedVolume, stopBed } from "../src/audio";
 import { imgSource, photos } from "../src/images";
+import { loadJson, saveJson, store } from "../src/storage";
 import { useSessionAwake } from "../src/keepAwake";
 import { useLandscapeOnFocus } from "../src/landscape";
 import { useOscillate } from "../src/motion";
 import { colors, fonts } from "../src/theme";
 
-const DOT = 26;
 const WRAP = 120;
 const PAD = 48;
 const RIVER_ASPECT = 1600 / 1067;
 
-function coverRect(bw: number, bh: number, aspect: number) {
+function coverRect(bw: number, bh: number, aspect: number, alignY = 0) {
   if (bw <= 0 || bh <= 0) return { width: "100%" as const, height: "100%" as const, left: 0, top: 0 };
   const boxAspect = bw / bh;
   if (boxAspect > aspect) {
     const height = bw / aspect;
-    return { width: bw, height, left: 0, top: (bh - height) / 2 };
+    const slack = bh - height;
+    return { width: bw, height, left: 0, top: slack / 2 + (-slack / 2) * alignY };
   }
   const width = bh * aspect;
   return { width, height: bh, left: (bw - width) / 2, top: 0 };
 }
 
 type Mode = "run" | "feel" | "release";
-type SoundMode = "stream" | "wind" | "mute";
+type SoundMode = "stream" | "forest" | "wind" | "mute";
 
-const BED_VOL = 0.26;
-const SOUND_CYCLE: SoundMode[] = ["stream", "wind", "mute"];
+const BED_VOL = 0.28;
+const SOUND_CYCLE: SoundMode[] = ["stream", "forest", "wind", "mute"];
 const SOUND_UI: Record<SoundMode, { icon: keyof typeof Ionicons.glyphMap; label: string }> = {
-  stream: { icon: "moon-outline", label: "Calm" },
-  wind: { icon: "leaf-outline", label: "Forest Wind" },
+  stream: { icon: "musical-notes-outline", label: "Calm" },
+  forest: { icon: "leaf-outline", label: "Forest" },
+  wind: { icon: "cloudy-outline", label: "Forest Wind" },
   mute: { icon: "volume-mute-outline", label: "Mute" },
 };
 
@@ -47,11 +49,12 @@ export default function Follow() {
   const [box, setBox] = useState({ w: 844, h: 390 });
   const [speed, setSpeed] = useState(0.32);
   const [seconds, setSeconds] = useState(120);
-  const [soundMode, setSoundMode] = useState<SoundMode>("stream");
+  const [soundMode, setSoundMode] = useState<SoundMode>("forest");
   const [volume, setVolume] = useState(BED_VOL);
   const [mode, setMode] = useState<Mode>("run");
   const [chromeUp, setChromeUp] = useState(true);
-  const soundModeRef = useRef<SoundMode>("stream");
+  const [showGuide, setShowGuide] = useState(false);
+  const soundModeRef = useRef<SoundMode>("forest");
   const volumeRef = useRef(BED_VOL);
   soundModeRef.current = soundMode;
   volumeRef.current = volume;
@@ -143,6 +146,17 @@ export default function Follow() {
     return () => clearInterval(c);
   }, [mode]);
 
+  useEffect(() => {
+    loadJson(store.keys.lightenGuide, false).then((seen) => {
+      if (!seen) setShowGuide(true);
+    });
+  }, []);
+
+  const closeGuide = async () => {
+    setShowGuide(false);
+    await saveJson(store.keys.lightenGuide, true);
+  };
+
   useFocusEffect(
     useCallback(() => {
       if (modeRef.current === "run") startSweep();
@@ -151,6 +165,8 @@ export default function Follow() {
         playPannedBed(bedKind, volumeRef.current)
           .then(() => setBedPan(panFromProgress(tNow.current)))
           .catch(() => {});
+      } else {
+        stopBed();
       }
       return () => {
         stopSweep();
@@ -185,12 +201,12 @@ export default function Follow() {
   const feelIt = useCallback(() => {
     if (modeRef.current !== "run") return;
     stopSweep(() => setMode("feel"));
-    setBedVolume(volumeRef.current * 0.7, 300);
+    pauseBed().catch(() => {});
   }, [stopSweep]);
 
   const letGo = useCallback(() => {
     if (modeRef.current !== "feel") return;
-    setBedVolume(volumeRef.current, 300);
+    resumeBed().catch(() => {});
     setMode("release");
     if (releaseTimer.current) clearTimeout(releaseTimer.current);
     releaseTimer.current = setTimeout(() => {
@@ -202,11 +218,16 @@ export default function Follow() {
 
   const onScreenTap = useCallback(() => {
     const now = modeRef.current;
-    if (now === "run") feelIt();
-    else if (now === "feel") letGo();
-    const bed = soundModeRef.current;
-    if (bed !== "mute" && !isBedPlaying()) {
-      playPannedBed(bed, now === "run" ? volumeRef.current * 0.7 : volumeRef.current).catch(() => {});
+    if (now === "run") {
+      feelIt();
+      return;
+    }
+    if (now === "feel") {
+      letGo();
+      const bed = soundModeRef.current;
+      if (bed !== "mute" && !isBedPlaying()) {
+        playPannedBed(bed, volumeRef.current).catch(() => {});
+      }
     }
   }, [feelIt, letGo]);
 
@@ -223,15 +244,15 @@ export default function Follow() {
       }}
     >
       <View pointerEvents="none" style={styles.backdrop}>
-        <Image source={imgSource(photos.stream)} style={coverRect(box.w, box.h, RIVER_ASPECT)} />
+        <Image source={imgSource(photos.stream)} style={coverRect(box.w, box.h, RIVER_ASPECT, 1.18)} />
       </View>
       <View pointerEvents="none" style={styles.dim} />
       <Svg pointerEvents="none" width={box.w} height={box.h} style={StyleSheet.absoluteFill}>
         <Defs>
           <RadialGradient id="vignette" cx="50%" cy="50%" rx="62%" ry="70%">
-            <Stop offset="0" stopColor="#000" stopOpacity="0" />
-            <Stop offset="0.55" stopColor="#000" stopOpacity="0.03" />
-            <Stop offset="1" stopColor="#000" stopOpacity="0.22" />
+            <Stop offset="0" stopColor="#000" stopOpacity="0.08" />
+            <Stop offset="0.5" stopColor="#000" stopOpacity="0.22" />
+            <Stop offset="1" stopColor="#000" stopOpacity="0.52" />
           </RadialGradient>
         </Defs>
         <Rect x="0" y="0" width="100%" height="100%" fill="url(#vignette)" />
@@ -250,17 +271,39 @@ export default function Follow() {
         </View>
       </Pressable>
 
-      <Animated.View pointerEvents={chromeUp ? "box-none" : "none"} style={[styles.topBar, { opacity: chrome }]}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={styles.back}>
+      <View pointerEvents="box-none" style={styles.topBar}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.replace("/(tabs)")} style={styles.back}>
           <Ionicons name="chevron-back" size={20} color={colors.ink} />
         </Pressable>
-        <View style={styles.titlePill}>
+        <Animated.View pointerEvents={chromeUp ? "auto" : "none"} style={[styles.titlePill, { opacity: chrome }]}>
           <Text style={styles.topTitle}>Lighten</Text>
           {mode === "feel" ? (
             <Text style={styles.topHint}>Tap anywhere when you're ready to let it go.</Text>
           ) : null}
+        </Animated.View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="How to use Lighten"
+          onPress={() => setShowGuide(true)}
+          style={styles.helpBtn}
+        >
+          <Ionicons name="help-outline" size={18} color={colors.ink} />
+        </Pressable>
+      </View>
+      {showGuide ? (
+        <View style={styles.guideOverlay}>
+          <View style={styles.guideCard}>
+            <Text style={styles.guideCardTitle}>How to use Lighten</Text>
+            <Text style={styles.guideCardBody}>Keep your head facing forward and comfortably still.</Text>
+            <Text style={styles.guideCardBody}>Follow the moving light with your eyes, not by turning your neck.</Text>
+            <Text style={styles.guideCardBody}>If you like, slowly move the phone left and right while your eyes stay with the light.</Text>
+            <Text style={styles.guideCardBody}>If you feel dizzy, strained, or unsettled, pause or stop. You can leave at any time.</Text>
+            <Pressable accessibilityRole="button" onPress={closeGuide} style={styles.guideDone}>
+              <Text style={styles.guideDoneText}>Begin</Text>
+            </Pressable>
+          </View>
         </View>
-      </Animated.View>
+      ) : null}
 
       <Animated.View
         pointerEvents={chromeUp ? "auto" : "none"}
@@ -277,9 +320,9 @@ export default function Follow() {
               <Text style={styles.guide}>Exhale... let it go.</Text>
             ) : (
               <>
-                <Text style={styles.guide}>Hold your head still.</Text>
-                <Text style={styles.guideSoft}>Slowly glide your phone left to right.</Text>
-                <Text style={styles.guideHint}>Let your eyes follow the light to the edges.</Text>
+                <Text style={styles.guide}>Keep your head facing forward.</Text>
+                <Text style={styles.guideSoft}>Follow the light with your eyes. You can slowly move the phone side to side.</Text>
+                <Text style={styles.guideHint}>Pause if your eyes or head feel strained.</Text>
               </>
             )}
           </Pressable>
@@ -424,16 +467,16 @@ function VolumeSlider({ value, onChange }: { value: number; onChange: (v: number
   );
 }
 
-function OrbGlow({ id }: { id: string }) {
+function FireflyGlow({ id }: { id: string }) {
   return (
     <Svg width={WRAP} height={WRAP}>
       <Defs>
-        <RadialGradient id={id} cx="50%" cy="50%" r="50%">
-          <Stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.95" />
-          <Stop offset="16%" stopColor="#FFFFFF" stopOpacity="0.55" />
-          <Stop offset="38%" stopColor="#FFFFFF" stopOpacity="0.2" />
-          <Stop offset="68%" stopColor="#FFFFFF" stopOpacity="0.06" />
-          <Stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
+        <RadialGradient id={id} cx="50%" cy="52%" r="50%">
+          <Stop offset="0%" stopColor="#FFFBE6" stopOpacity="1" />
+          <Stop offset="12%" stopColor="#FFE98A" stopOpacity="0.88" />
+          <Stop offset="30%" stopColor="#E8F27A" stopOpacity="0.42" />
+          <Stop offset="58%" stopColor="#8FBF4A" stopOpacity="0.14" />
+          <Stop offset="100%" stopColor="#1A2610" stopOpacity="0" />
         </RadialGradient>
       </Defs>
       <Rect width={WRAP} height={WRAP} fill={`url(#${id})`} />
@@ -441,13 +484,26 @@ function OrbGlow({ id }: { id: string }) {
   );
 }
 
+function FireflyBody() {
+  const c = WRAP / 2;
+  return (
+    <Svg width={WRAP} height={WRAP} style={StyleSheet.absoluteFill}>
+      <Ellipse cx={c - 7} cy={c - 1} rx={8} ry={3.6} fill="rgba(255,252,220,0.2)" />
+      <Ellipse cx={c + 7} cy={c - 1} rx={8} ry={3.6} fill="rgba(255,252,220,0.2)" />
+      <Ellipse cx={c} cy={c - 1} rx={2.4} ry={5.4} fill="#2C2616" />
+      <Ellipse cx={c} cy={c + 3.2} rx={2.8} ry={3.4} fill="#FFF3A8" />
+    </Svg>
+  );
+}
+
 function TrackDot({ frozen, releasing }: { frozen: boolean; releasing: boolean }) {
-  const pulse = useOscillate(2200);
+  const pulse = useOscillate(frozen ? 2800 : 1800);
   const burst = useRef(new Animated.Value(0)).current;
   const hold = useRef(new Animated.Value(frozen ? 1 : 0)).current;
-  const glow = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] });
-  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1.14] });
-  const holdScale = hold.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
+  const glow = pulse.interpolate({ inputRange: [0, 1], outputRange: frozen ? [0.9, 1] : [0.86, 1] });
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1.06] });
+  const bob = pulse.interpolate({ inputRange: [0, 1], outputRange: [-3, 3] });
+  const holdScale = hold.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] });
   const bloomScale = Animated.multiply(scale, holdScale);
   const ringScale = burst.interpolate({ inputRange: [0, 1], outputRange: [1, 1.85] });
   const ringFade = burst.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0] });
@@ -476,17 +532,17 @@ function TrackDot({ frozen, releasing }: { frozen: boolean; releasing: boolean }
   }, [burst, releasing]);
 
   return (
-    <View style={styles.dotInner}>
+    <Animated.View style={[styles.dotInner, { transform: [{ translateY: bob }] }]}>
       {releasing ? (
         <Animated.View style={[styles.glowWrap, { opacity: ringFade, transform: [{ scale: ringScale }] }]}>
-          <OrbGlow id="orbBurst" />
+          <FireflyGlow id="orbBurst" />
         </Animated.View>
       ) : null}
       <Animated.View style={[styles.glowWrap, { opacity: glow, transform: [{ scale: bloomScale }] }]}>
-          <OrbGlow id="orbGlow" />
+        <FireflyGlow id="orbGlow" />
       </Animated.View>
-      <View style={styles.core} />
-    </View>
+      <FireflyBody />
+    </Animated.View>
   );
 }
 
@@ -504,7 +560,7 @@ const styles = StyleSheet.create({
   },
   dim: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.22)",
+    backgroundColor: "rgba(4, 10, 8, 0.5)",
   },
   stage: {
     ...StyleSheet.absoluteFillObject,
@@ -514,7 +570,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    top: "50%",
+    top: "42%",
     height: WRAP,
     marginTop: -WRAP / 2,
   },
@@ -531,6 +587,34 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
     gap: 8,
   },
+  helpBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(251,249,245,0.78)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  guideOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 20,
+    backgroundColor: "rgba(61,57,51,0.38)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  guideCard: {
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: 22,
+    padding: 20,
+    backgroundColor: "rgba(251,249,245,0.94)",
+    gap: 8,
+  },
+  guideCardTitle: { fontFamily: fonts.titleBold, color: colors.ink, fontSize: 22, marginBottom: 4 },
+  guideCardBody: { fontFamily: fonts.body, color: colors.muted, fontSize: 15, lineHeight: 22 },
+  guideDone: { marginTop: 10, borderRadius: 999, backgroundColor: colors.sage, paddingVertical: 12, alignItems: "center" },
+  guideDoneText: { fontFamily: fonts.bodyBold, color: colors.linen, fontSize: 15 },
   back: {
     width: 34,
     height: 34,
@@ -687,15 +771,5 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: WRAP,
     height: WRAP,
-  },
-  core: {
-    width: DOT,
-    height: DOT,
-    borderRadius: DOT / 2,
-    backgroundColor: "#FFFFFF",
-    shadowColor: "#FFFFFF",
-    shadowOpacity: 0.95,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 0 },
   },
 });

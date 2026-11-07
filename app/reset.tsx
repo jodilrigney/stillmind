@@ -1,14 +1,61 @@
+import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useSessionAwake } from "../src/keepAwake";
-import { ReactNode, useEffect, useState } from "react";
-import { Animated, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { router } from "expo-router";
+import { ReactNode, useEffect, useRef, useState } from "react";
+import { Animated, Image, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { isBedPlaying, pauseBed, playPannedBed, resumeBed, setBedPan, setBedVolume, stopBed } from "../src/audio";
 import { EftGuide } from "../src/components/EftGuide";
-import { Glass, PrimaryButton, ScreenHeader } from "../src/components/ui";
-import { EFT_POINTS, MICRO_ACTIONS } from "../src/data";
+import { PrimaryButton, ScreenHeader } from "../src/components/ui";
+import { EFT_POINTS } from "../src/data";
 import { tapHeavy, tapSide, tapSoft } from "../src/haptics";
 import { imgSource, photos } from "../src/images";
-import { useOscillate } from "../src/motion";
+import { useSessionAwake } from "../src/keepAwake";
+import { GlowDot, useOscillate } from "../src/motion";
+import { setSpeakVolume, speakSoothing, stopSpeak } from "../src/speak";
 import { colors, fonts } from "../src/theme";
+
+const TAP_SPEED_MIN = 0.2;
+const TAP_SPEED_MAX = 1;
+const TAP_VOL = 0.32;
+const ZEN_BED = "stream" as const;
+const EFT_BED = "calm" as const;
+const EFT_VOL = 0.28;
+
+function tapMs(speed: number) {
+  return Math.round(420 + (1 - speed) * 1000);
+}
+
+function tapPan(side: number) {
+  return side === 0 ? -0.36 : 0.36;
+}
+
+function easeTapPan(side: number) {
+  setBedPan(tapPan(side), 320);
+}
+
+function speedWord(speed: number) {
+  if (speed < 0.4) return "Slow";
+  if (speed > 0.75) return "Fast";
+  return "Gentle";
+}
+
+const POSES: { id: "collar" | "bicep"; label: string }[] = [
+  { id: "collar", label: "Collarbone" },
+  { id: "bicep", label: "Outer arm" },
+];
+
+const LAKE_ASPECT = 572 / 1024;
+
+function coverRect(bw: number, bh: number, aspect: number) {
+  if (bw <= 0 || bh <= 0) return { width: "100%" as const, height: "100%" as const, left: 0, top: 0 };
+  const boxAspect = bw / bh;
+  if (boxAspect > aspect) {
+    const height = bw / aspect;
+    return { width: bw, height, left: 0, top: (bh - height) / 2 };
+  }
+  const width = bh * aspect;
+  return { width, height: bh, left: (bw - width) / 2, top: 0 };
+}
 
 const COLLARBONES = [
   { id: "lc", label: "Left collarbone", side: "L" as const },
@@ -19,22 +66,27 @@ const BICEPS = [
   { id: "rb", label: "Right bicep", side: "R" as const },
 ];
 
-type Mode = "bilateral" | "eft" | "spark";
+type Mode = "bilateral" | "eft";
+
+const MODES: { id: Mode; label: string }[] = [
+  { id: "bilateral", label: "Bilateral Haptic Tapping" },
+  { id: "eft", label: "EFT Tapping Guide" },
+];
 
 function ResetChrome({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void }) {
   return (
     <>
-      <ScreenHeader title="STILL-MIND" subtitle="Tap and return" />
+      <ScreenHeader title="STILL-MIND" subtitle="Somatic Tapping" onBack={() => router.replace("/(tabs)")} />
       <View style={styles.modes}>
-        {(["bilateral", "eft", "spark"] as Mode[]).map((m) => (
+        {MODES.map((m) => (
           <Pressable
-            key={m}
+            key={m.id}
             accessibilityRole="button"
-            accessibilityLabel={m === "spark" ? "Tiny spark" : m === "eft" ? "EFT" : "Bilateral"}
-            onPress={() => setMode(m)}
-            style={[styles.mode, mode === m && styles.modeOn]}
+            accessibilityLabel={m.label}
+            onPress={() => setMode(m.id)}
+            style={[styles.mode, mode === m.id && styles.modeOn]}
           >
-            <Text style={styles.modeText}>{m === "spark" ? "Tiny spark" : m === "eft" ? "EFT" : "Bilateral"}</Text>
+            <Text style={[styles.modeText, mode === m.id && styles.modeTextOn]}>{m.label}</Text>
           </Pressable>
         ))}
       </View>
@@ -45,30 +97,135 @@ function ResetChrome({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void
 export default function Reset() {
   useSessionAwake();
   const [mode, setMode] = useState<Mode>("bilateral");
+  const [box, setBox] = useState({ w: 0, h: 0 });
   const drift = useOscillate(18000);
   const shift = drift.interpolate({ inputRange: [0, 1], outputRange: [-16, 16] });
   const zoom = drift.interpolate({ inputRange: [0, 1], outputRange: [1.1, 1.18] });
   const chrome = <ResetChrome mode={mode} setMode={setMode} />;
 
-  if (mode === "bilateral") {
-    return (
-      <View style={{ flex: 1, overflow: "hidden" }}>
+  return (
+    <View
+      style={styles.page}
+      onLayout={(e) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
+    >
+      <Image
+        source={imgSource(photos.stillLake)}
+        style={[styles.lake, coverRect(box.w, box.h, LAKE_ASPECT), Platform.OS === "web" ? styles.lakeWebBlur : null]}
+      />
+      <LinearGradient
+        pointerEvents="none"
+        colors={["rgba(251, 249, 245, 0.18)", "rgba(247, 246, 242, 0.10)", "rgba(251, 249, 245, 0.08)"]}
+        locations={[0, 0.32, 1]}
+        style={StyleSheet.absoluteFillObject}
+      />
+      {mode === "bilateral" ? (
         <Bilateral chrome={chrome} />
-      </View>
-    );
-  }
+      ) : (
+        <View style={{ flex: 1 }}>
+          {chrome}
+          <Eft />
+        </View>
+      )}
+    </View>
+  );
+}
+
+function MiniSlider({
+  label,
+  accessibilityLabel,
+  value,
+  onChange,
+  min = 0,
+  max = 1,
+  step = 0.08,
+  trailing,
+}: {
+  label: string;
+  accessibilityLabel: string;
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  trailing?: ReactNode;
+}) {
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const trackW = useRef(120);
+  const dragging = useRef(false);
+  const span = Math.max(0.001, max - min);
+  const t = (value - min) / span;
+
+  const setFromX = (x: number) => {
+    const next = min + (x / Math.max(1, trackW.current)) * span;
+    onChangeRef.current(Math.max(min, Math.min(max, +next.toFixed(2))));
+  };
+
+  const fromNative = (e: { nativeEvent: { locationX: number } }) => {
+    setFromX(e.nativeEvent.locationX);
+  };
+
+  const webBind =
+    Platform.OS === "web"
+      ? {
+          onPointerDown: (e: {
+            stopPropagation: () => void;
+            currentTarget: { setPointerCapture?: (id: number) => void };
+            nativeEvent: { pointerId: number; offsetX: number };
+          }) => {
+            e.stopPropagation();
+            dragging.current = true;
+            e.currentTarget.setPointerCapture?.(e.nativeEvent.pointerId);
+            setFromX(e.nativeEvent.offsetX);
+          },
+          onPointerMove: (e: { buttons?: number; nativeEvent: { offsetX: number } }) => {
+            if (!dragging.current && e.buttons !== 1) return;
+            setFromX(e.nativeEvent.offsetX);
+          },
+          onPointerUp: () => {
+            dragging.current = false;
+          },
+        }
+      : {};
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#E7EFE8", overflow: "hidden" }}>
-      <Animated.Image
-        source={imgSource(photos.calm)}
-        resizeMode="cover"
-        style={[styles.backdrop, { transform: [{ scale: zoom }, { translateX: shift }] }]}
-      />
-      <LinearGradient colors={["rgba(255,252,245,0.42)", "rgba(244,240,230,0.5)", "rgba(251,249,245,0.88)"]} style={{ flex: 1 }}>
-        {chrome}
-        {mode === "eft" ? <Eft /> : <Spark />}
-      </LinearGradient>
+    <View style={styles.ctrlRow}>
+      <Text style={styles.ctrlLab}>{label}</Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${accessibilityLabel}, lower`}
+        onPress={() => onChange(Math.max(min, +(value - step).toFixed(2)))}
+        style={styles.nudge}
+      >
+        <Text style={styles.nudgeText}>-</Text>
+      </Pressable>
+      <View
+        accessibilityRole="adjustable"
+        accessibilityLabel={accessibilityLabel}
+        onLayout={(e) => {
+          trackW.current = e.nativeEvent.layout.width;
+        }}
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => true}
+        onResponderGrant={fromNative}
+        onResponderMove={fromNative}
+        {...(webBind as object)}
+        style={styles.ctrlHit}
+      >
+        <View style={styles.ctrlTrack}>
+          <View style={[styles.fill, { width: `${Math.round(t * 100)}%` }]} />
+        </View>
+        <View style={[styles.ctrlThumb, { left: `${Math.round(t * 100)}%` }]} />
+      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${accessibilityLabel}, higher`}
+        onPress={() => onChange(Math.min(max, +(value + step).toFixed(2)))}
+        style={styles.nudge}
+      >
+        <Text style={styles.nudgeText}>+</Text>
+      </Pressable>
+      {trailing}
     </View>
   );
 }
@@ -77,14 +234,24 @@ function Bilateral({ chrome }: { chrome: ReactNode }) {
   const [phase, setPhase] = useState<"collar" | "bicep">("collar");
   const [side, setSide] = useState(0);
   const [running, setRunning] = useState(true);
-  const [speed, setSpeed] = useState(0.45);
   const [secs, setSecs] = useState(15);
+  const [speed, setSpeed] = useState(0.55);
+  const [volume, setVolume] = useState(TAP_VOL);
+  const [muted, setMuted] = useState(false);
+  const volumeRef = useRef(TAP_VOL);
+  const lastVolRef = useRef(TAP_VOL);
+  const mutedRef = useRef(false);
+  const sideRef = useRef(0);
   const points = phase === "collar" ? COLLARBONES : BICEPS;
   const point = points[side];
-  const interval = Math.round(1300 - speed * 950);
+  const interval = tapMs(speed);
+  volumeRef.current = muted ? 0 : volume;
+  mutedRef.current = muted;
+  sideRef.current = side;
 
   useEffect(() => {
     if (running) tapSide(point.side);
+    easeTapPan(side);
   }, [phase, side, running, point.side]);
 
   useEffect(() => {
@@ -96,139 +263,361 @@ function Bilateral({ chrome }: { chrome: ReactNode }) {
   useEffect(() => {
     if (!running) return;
     const t = setInterval(() => {
-      setSecs((n) => {
-        if (n > 1) return n - 1;
-        setPhase((p) => (p === "collar" ? "bicep" : "collar"));
-        setSide(0);
-        return 15;
-      });
+      setSecs((n) => (n > 1 ? n - 1 : 15));
     }, 1000);
     return () => clearInterval(t);
   }, [running]);
 
-  const speedLabel = speed < 0.35 ? "Slow" : speed > 0.7 ? "Fast" : "Gentle";
+  const pickPose = (next: "collar" | "bicep") => {
+    setPhase(next);
+    setSide(0);
+    setSecs(15);
+  };
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!running) {
+        await pauseBed();
+        return;
+      }
+      if (isBedPlaying()) {
+        await resumeBed();
+        setBedVolume(volumeRef.current, 80);
+        easeTapPan(sideRef.current);
+        return;
+      }
+      await playPannedBed(ZEN_BED, volumeRef.current);
+      if (alive) easeTapPan(sideRef.current);
+    })().catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [running]);
+
+  useEffect(() => () => stopBed(), []);
+
+  const sideLabel = phase === "collar" ? "Collarbone Point" : "Outer arm";
+  const hear = (next: number) => {
+    volumeRef.current = next;
+    if (!running) return;
+    if (isBedPlaying()) setBedVolume(next, 40);
+    else if (next > 0.01) {
+      playPannedBed(ZEN_BED, next)
+        .then(() => easeTapPan(sideRef.current))
+        .catch(() => {});
+    }
+  };
+  const applyVolume = (next: number) => {
+    if (next <= 0.01) {
+      setMuted(true);
+      setVolume(0);
+      hear(0);
+      return;
+    }
+    setMuted(false);
+    lastVolRef.current = next;
+    setVolume(next);
+    hear(next);
+  };
+  const toggleMute = () => {
+    if (mutedRef.current) {
+      const v = lastVolRef.current > 0.01 ? lastVolRef.current : TAP_VOL;
+      setMuted(false);
+      setVolume(v);
+      hear(v);
+      return;
+    }
+    if (volume > 0.01) lastVolRef.current = volume;
+    setMuted(true);
+    hear(0);
+  };
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.bilateralPage}>
       <Image
-        source={imgSource(photos.bilateralCollar)}
-        resizeMode="cover"
-        style={[StyleSheet.absoluteFillObject, { opacity: phase === "collar" ? 1 : 0 }]}
+        source={imgSource(photos.tappingCollar)}
+        resizeMode="contain"
+        pointerEvents="none"
+        style={[styles.tappingFig, Platform.OS === "web" ? styles.tappingEdge : null, { opacity: phase === "collar" ? 1 : 0 }]}
       />
       <Image
-        source={imgSource(photos.bilateralArms)}
-        resizeMode="cover"
-        style={[StyleSheet.absoluteFillObject, { opacity: phase === "bicep" ? 1 : 0 }]}
+        source={imgSource(photos.tappingArms)}
+        resizeMode="contain"
+        pointerEvents="none"
+        style={[styles.tappingFig, Platform.OS === "web" ? styles.tappingEdge : null, { opacity: phase === "bicep" ? 1 : 0 }]}
       />
       {chrome}
-      <Text style={styles.point}>
-        {point.label} · {secs}s
-      </Text>
-      <Text style={styles.hint}>
-        {phase === "collar" ? "Soft collarbone taps, one side at a time" : "Now the outer arms, still one side at a time"}
-      </Text>
-      <View style={styles.hugStage} />
-      <View style={styles.hugDock}>
-        <View style={styles.speedRow}>
-          <Text style={styles.speedLab}>Speed</Text>
-          <Text style={styles.speedVal}>{speedLabel}</Text>
-        </View>
-        <View style={styles.sliderRow}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Slower"
-            onPress={() => setSpeed((v) => Math.max(0.15, +(v - 0.1).toFixed(1)))}
-            style={styles.nudge}
-          >
-            <Text style={styles.nudgeText}>−</Text>
-          </Pressable>
-          <View style={styles.track}>
-            <View style={[styles.fill, { width: `${Math.round(speed * 100)}%` }]} />
+      <View style={styles.bodyRow}>
+        <Text style={[styles.sideLab, side === 0 && styles.sideLabOn]}>{sideLabel}</Text>
+        <View style={styles.bodyWrap}>
+          <View style={[styles.glow, phase === "collar" ? styles.glowCollarL : styles.glowArmL]}>
+            <GlowDot active={side === 0} size={side === 0 ? 16 : 9} color="rgba(232,168,112,0.95)" />
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Faster"
-            onPress={() => setSpeed((v) => Math.min(1, +(v + 0.1).toFixed(1)))}
-            style={styles.nudge}
-          >
-            <Text style={styles.nudgeText}>+</Text>
-          </Pressable>
+          <View style={[styles.glow, phase === "collar" ? styles.glowCollarR : styles.glowArmR]}>
+            <GlowDot active={side === 1} size={side === 1 ? 16 : 9} color="rgba(232,168,112,0.95)" />
+          </View>
         </View>
-        <PrimaryButton label={running ? "Pause tapping" : "Resume"} onPress={() => setRunning((v) => !v)} />
+        <Text style={[styles.sideLab, side === 1 && styles.sideLabOn]}>{sideLabel}</Text>
       </View>
+      <LinearGradient colors={["rgba(251,249,245,0)", "rgba(251,249,245,0.55)", "rgba(251,249,245,0.88)"]} style={styles.hugDock}>
+        <Text style={styles.lead}>Tapping sequences to reduce stress</Text>
+        <View style={styles.poseRow}>
+          {POSES.map((p) => (
+            <Pressable
+              key={p.id}
+              accessibilityRole="button"
+              accessibilityLabel={p.label}
+              onPress={() => pickPose(p.id)}
+              style={[styles.poseChip, phase === p.id && styles.poseChipOn]}
+            >
+              <Text style={[styles.poseText, phase === p.id && styles.poseTextOn]}>{p.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={styles.timer}>{secs}s</Text>
+        <Text style={styles.quote}>“Even though I feel overwhelmed, I accept my heart.”</Text>
+        <MiniSlider
+          label="Speed"
+          accessibilityLabel="Tapping speed"
+          value={speed}
+          min={TAP_SPEED_MIN}
+          max={TAP_SPEED_MAX}
+          step={0.1}
+          onChange={setSpeed}
+          trailing={<Text style={styles.ctrlWord}>{speedWord(speed)}</Text>}
+        />
+        <MiniSlider
+          label="Music"
+          accessibilityLabel="Music volume"
+          value={muted ? 0 : volume}
+          step={0.08}
+          onChange={applyVolume}
+          trailing={
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={muted ? "Unmute music" : "Mute music"}
+              onPress={toggleMute}
+              style={styles.muteBtn}
+            >
+              <Ionicons name={muted ? "volume-mute-outline" : "volume-low-outline"} size={16} color={colors.ink} />
+            </Pressable>
+          }
+        />
+        <PrimaryButton
+          label={running ? "Tap here when done" : "Resume"}
+          onPress={() => setRunning((v) => !v)}
+        />
+      </LinearGradient>
     </View>
   );
 }
 
 function Eft() {
   const [i, setI] = useState(0);
-  const [left, setLeft] = useState(8);
+  const [voiceOn, setVoiceOn] = useState(false);
+  const [musicOn, setMusicOn] = useState(true);
+  const [musicVol, setMusicVol] = useState(EFT_VOL);
+  const [voiceVol, setVoiceVol] = useState(0.78);
+  const musicVolRef = useRef(EFT_VOL);
+  const voiceVolRef = useRef(0.78);
+  const lastMusicRef = useRef(EFT_VOL);
+  const lastVoiceRef = useRef(0.78);
   const point = EFT_POINTS[i];
+  musicVolRef.current = musicOn ? musicVol : 0;
+  voiceVolRef.current = voiceOn ? voiceVol : 0;
+
+  const nextPoint = () => {
+    tapSoft();
+    setI((p) => (p + 1) % EFT_POINTS.length);
+  };
+  const prevPoint = () => {
+    tapSoft();
+    setI((p) => (p - 1 + EFT_POINTS.length) % EFT_POINTS.length);
+  };
+
   useEffect(() => {
-    const t = setInterval(() => {
-      setLeft((n) => {
-        if (n > 1) {
-          tapSoft();
-          return n - 1;
-        }
-        tapHeavy();
-        setI((p) => (p + 1) % EFT_POINTS.length);
-        return 8;
-      });
-    }, 1000);
-    return () => clearInterval(t);
-  }, []);
+    let alive = true;
+    (async () => {
+      const vol = musicVolRef.current;
+      if (vol <= 0.01) {
+        await stopBed();
+        return;
+      }
+      if (isBedPlaying()) {
+        setBedVolume(vol, 80);
+        setBedPan(0, 0);
+        return;
+      }
+      await playPannedBed(EFT_BED, vol);
+      if (alive) setBedPan(0, 0);
+    })().catch(() => {});
+    return () => {
+      alive = false;
+      stopBed();
+    };
+  }, [musicOn]);
+
+  useEffect(() => {
+    if (!voiceOn || voiceVolRef.current <= 0.01) {
+      stopSpeak();
+      return;
+    }
+    speakSoothing(`${point.label}. ${point.finger}`, point.id, voiceVolRef.current);
+    return () => stopSpeak();
+  }, [voiceOn, point.id, point.label, point.finger]);
+
+  const applyMusicVol = (next: number) => {
+    if (next <= 0.01) {
+      setMusicOn(false);
+      setMusicVol(0);
+      setBedVolume(0, 40);
+      return;
+    }
+    setMusicOn(true);
+    lastMusicRef.current = next;
+    setMusicVol(next);
+    if (isBedPlaying()) setBedVolume(next, 40);
+    else {
+      playPannedBed(EFT_BED, next)
+        .then(() => setBedPan(0, 0))
+        .catch(() => {});
+    }
+  };
+
+  const applyVoiceVol = (next: number) => {
+    if (next <= 0.01) {
+      setVoiceOn(false);
+      setVoiceVol(0);
+      stopSpeak();
+      setSpeakVolume(0);
+      return;
+    }
+    setVoiceOn(true);
+    lastVoiceRef.current = next;
+    setVoiceVol(next);
+    setSpeakVolume(next);
+  };
+
+  const toggleMusic = () => {
+    if (musicOn) {
+      if (musicVol > 0.01) lastMusicRef.current = musicVol;
+      setMusicOn(false);
+      setBedVolume(0, 40);
+      return;
+    }
+    const v = lastMusicRef.current > 0.01 ? lastMusicRef.current : EFT_VOL;
+    setMusicOn(true);
+    setMusicVol(v);
+    playPannedBed(EFT_BED, v)
+      .then(() => setBedPan(0, 0))
+      .catch(() => {});
+  };
+
+  const toggleVoice = () => {
+    if (voiceOn) {
+      if (voiceVol > 0.01) lastVoiceRef.current = voiceVol;
+      setVoiceOn(false);
+      stopSpeak();
+      return;
+    }
+    const v = lastVoiceRef.current > 0.01 ? lastVoiceRef.current : 0.78;
+    setVoiceOn(true);
+    setVoiceVol(v);
+  };
 
   return (
-    <View style={{ padding: 18 }}>
-      <Glass style={{ backgroundColor: "rgba(251,249,245,0.62)" }}>
-        <Text style={styles.kicker}>EFT · {i + 1} of {EFT_POINTS.length}</Text>
-        <Text style={styles.big}>{point.label}</Text>
+    <View style={{ flex: 1 }}>
+      <View style={{ paddingHorizontal: 18, paddingTop: 0 }}>
+        <View style={styles.eftHead}>
+          <Text style={styles.kicker}>EFT · {i + 1} of {EFT_POINTS.length}</Text>
+        </View>
+        <View style={styles.eftTitleRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Previous tapping point"
+            onPress={prevPoint}
+            style={styles.prevBtn}
+          >
+            <Ionicons name="chevron-back" size={16} color={colors.ink} />
+            <Text style={styles.nextLab}>Back</Text>
+          </Pressable>
+          <Text style={[styles.big, { marginVertical: 4, flex: 1, textAlign: "center" }]}>{point.label}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Next tapping point"
+            onPress={nextPoint}
+            style={styles.nextBtn}
+          >
+            <Text style={styles.nextLab}>Next</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.ink} />
+          </Pressable>
+        </View>
         <View style={styles.dots}>
           {EFT_POINTS.map((p, idx) => (
             <View key={p.id} style={[styles.dot, idx === i && styles.dotOn]} />
           ))}
         </View>
-        <EftGuide kind={point.kind} label={point.label} hint={point.hint} finger={point.finger} />
-        <Text style={styles.center}>{left}s</Text>
-      </Glass>
-    </View>
-  );
-}
-
-function Spark() {
-  const [idx, setIdx] = useState(() => Math.floor(Math.random() * MICRO_ACTIONS.length));
-  const [done, setDone] = useState(0);
-  const action = MICRO_ACTIONS[idx];
-  const next = (did: boolean) => {
-    if (did) setDone((n) => n + 1);
-    setIdx((i) => (i + 3) % MICRO_ACTIONS.length);
-  };
-  return (
-    <View style={{ flex: 1, paddingHorizontal: 18, paddingTop: 12, paddingBottom: 24 }}>
-      <Glass style={styles.sparkCard}>
-        <Text style={styles.sparkLead}>One tiny outdoor-sized move.{"\n"}No extra credit.</Text>
-        <View>
-          <Text style={styles.sparkKicker}>Just this</Text>
-          <Text style={styles.sparkAction}>{action}</Text>
+        <View style={styles.eftVols}>
+          <MiniSlider
+            label="Music"
+            accessibilityLabel="Music volume"
+            value={musicOn ? musicVol : 0}
+            step={0.06}
+            onChange={applyMusicVol}
+            trailing={
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={musicOn ? "Mute music" : "Unmute music"}
+                onPress={toggleMusic}
+                style={styles.muteBtn}
+              >
+                <Ionicons name={musicOn ? "musical-notes-outline" : "volume-mute-outline"} size={16} color={colors.ink} />
+              </Pressable>
+            }
+          />
+          <MiniSlider
+            label="Voice"
+            accessibilityLabel="Voice volume"
+            value={voiceOn ? voiceVol : 0}
+            step={0.06}
+            onChange={applyVoiceVol}
+            trailing={
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={voiceOn ? "Turn off voice guidance" : "Hear the tapping instructions"}
+                onPress={toggleVoice}
+                style={styles.muteBtn}
+              >
+                <Ionicons name={voiceOn ? "volume-high-outline" : "volume-mute-outline"} size={16} color={colors.ink} />
+              </Pressable>
+            }
+          />
         </View>
-        <View>
-          <View style={styles.sparkBtns}>
-            <View style={{ flex: 1 }}>
-              <PrimaryButton label="I did it" onPress={() => next(true)} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <PrimaryButton label="Skip" color={colors.sand} onPress={() => next(false)} />
-            </View>
-          </View>
-          <Text style={styles.sparkFoot}>{done} tiny completions. That's plenty.</Text>
-        </View>
-      </Glass>
+      </View>
+      <EftGuide activeId={point.id} hint={point.hint} finger={point.finger} onNext={nextPoint} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  page: {
+    flex: 1,
+    overflow: "hidden",
+    backgroundColor: colors.linen,
+  },
+  lake: {
+    position: "absolute",
+    transform: [{ scale: 1.03 }],
+  },
+  lakeWebBlur: {
+    // @ts-expect-error web-only gauze
+    filter: "blur(2px)",
+  },
+  mist: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(244, 247, 246, 0.14)",
+  },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     width: "140%",
@@ -236,73 +625,108 @@ const styles = StyleSheet.create({
     left: "-20%",
     top: "-28%",
   },
-  hugStage: { flex: 1 },
+  bilateralPage: {
+    flex: 1,
+  },
+  tappingFig: {
+    position: "absolute",
+    width: "100%",
+    height: "100%",
+    backgroundColor: "transparent",
+  },
+  tappingEdge: {
+    // @ts-expect-error web-only: soften silhouette without blurring the drawing
+    filter: "drop-shadow(0 0 4px rgba(251, 249, 245, 0.55)) drop-shadow(0 0 10px rgba(247, 246, 242, 0.32))",
+  },
+  bodyRow: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    gap: 4,
+  },
+  bodyWrap: {
+    flex: 1,
+    height: "70%",
+    position: "relative",
+  },
+  glow: {
+    position: "absolute",
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  glowCollarL: { left: "6%", top: "30%" },
+  glowCollarR: { right: "6%", top: "30%" },
+  glowArmL: { left: "-24%", top: "72%" },
+  glowArmR: { right: "-24%", top: "72%" },
+  sideLab: {
+    width: 72,
+    fontFamily: fonts.body,
+    fontSize: 11,
+    lineHeight: 15,
+    color: colors.muted,
+    textAlign: "center",
+    textShadowColor: "rgba(255,252,245,0.9)",
+    textShadowRadius: 8,
+  },
+  sideLabOn: {
+    color: colors.ink,
+    fontFamily: fonts.bodyMed,
+  },
   hugDock: {
+    zIndex: 4,
     paddingHorizontal: 18,
     paddingTop: 4,
     paddingBottom: 18,
-    gap: 2,
+    gap: 6,
   },
-  modes: { flexDirection: "row", gap: 8, paddingHorizontal: 18 },
-  mode: {
+  lead: {
+    textAlign: "center",
+    fontFamily: fonts.body,
+    color: colors.ink,
+    fontSize: 15,
+  },
+  poseRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  poseChip: {
     flex: 1,
-    backgroundColor: "rgba(251,249,245,0.62)",
-    borderRadius: 16,
-    paddingVertical: 10,
+    borderRadius: 999,
+    paddingVertical: 8,
+    alignItems: "center",
+    backgroundColor: "rgba(251,249,245,0.8)",
+  },
+  poseChipOn: {
+    backgroundColor: colors.sageSoft,
+  },
+  poseText: {
+    fontFamily: fonts.bodyMed,
+    fontSize: 13,
+    color: colors.ink,
+  },
+  poseTextOn: {
+    color: colors.sageDeep,
+  },
+  timer: {
+    textAlign: "center",
+    fontFamily: fonts.titleLight,
+    fontSize: 36,
+    color: colors.ink,
+  },
+  modes: { paddingHorizontal: 18, gap: 8, marginBottom: 8 },
+  mode: {
+    backgroundColor: "rgba(251,249,245,0.86)",
+    borderRadius: 999,
+    paddingVertical: 12,
     alignItems: "center",
   },
   modeOn: { backgroundColor: colors.sageSoft },
-  modeText: { fontFamily: fonts.bodyMed, fontSize: 12, color: colors.ink },
+  modeText: { fontFamily: fonts.bodyMed, fontSize: 14, color: colors.ink },
+  modeTextOn: { color: colors.sageDeep },
   copy: { fontFamily: fonts.body, color: colors.muted, lineHeight: 20 },
-  sparkCard: {
-    flex: 1,
-    justifyContent: "space-evenly",
-    paddingHorizontal: 22,
-    paddingTop: 8,
-    paddingBottom: 16,
-    backgroundColor: "rgba(251,249,245,0.55)",
-  },
-  sparkLead: {
-    fontFamily: fonts.body,
-    color: "#2A261F",
-    fontSize: 20,
-    lineHeight: 30,
-    textAlign: "center",
-    textShadowColor: "rgba(255,252,245,0.95)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 10,
-  },
-  sparkKicker: {
-    fontFamily: fonts.titleBold,
-    letterSpacing: 2.4,
-    color: colors.muted,
-    fontSize: 12,
-    textAlign: "center",
-    marginBottom: 14,
-  },
-  sparkAction: {
-    fontFamily: fonts.titleLight,
-    fontSize: 30,
-    lineHeight: 40,
-    color: "#2A261F",
-    textAlign: "center",
-    paddingHorizontal: 8,
-    textShadowColor: "rgba(255,252,245,0.95)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 12,
-  },
-  sparkBtns: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  sparkFoot: {
-    fontFamily: fonts.body,
-    fontStyle: "italic",
-    color: colors.muted,
-    fontSize: 14,
-    textAlign: "center",
-    marginTop: 18,
-  },
   point: {
     textAlign: "center",
     fontFamily: fonts.bodyBold,
@@ -328,9 +752,6 @@ const styles = StyleSheet.create({
     textShadowColor: "rgba(255,252,245,0.95)",
     textShadowRadius: 12,
   },
-  speedRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 4 },
-  speedLab: { fontFamily: fonts.bodyMed, color: colors.ink, fontSize: 13 },
-  speedVal: { fontFamily: fonts.body, color: colors.muted, fontSize: 13 },
   sliderRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8, marginTop: 6 },
   track: { flex: 1, height: 8, borderRadius: 4, backgroundColor: "rgba(251,249,245,0.7)", overflow: "hidden" },
   fill: { height: 8, backgroundColor: colors.sage },
@@ -343,8 +764,67 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   nudgeText: { fontFamily: fonts.bodyMed, color: colors.ink, fontSize: 16 },
-  quote: { textAlign: "center", fontFamily: fonts.body, fontStyle: "italic", color: colors.ink, marginBottom: 8 },
+  ctrlRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  ctrlLab: {
+    width: 52,
+    fontFamily: fonts.bodyMed,
+    fontSize: 13,
+    color: colors.ink,
+  },
+  ctrlHit: {
+    flex: 1,
+    height: 28,
+    justifyContent: "center",
+    position: "relative",
+  },
+  ctrlTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "rgba(251,249,245,0.72)",
+    overflow: "hidden",
+  },
+  ctrlThumb: {
+    position: "absolute",
+    width: 16,
+    height: 16,
+    marginLeft: -8,
+    top: 6,
+    borderRadius: 8,
+    backgroundColor: colors.sage,
+  },
+  ctrlWord: {
+    width: 52,
+    fontFamily: fonts.body,
+    color: colors.muted,
+    fontSize: 13,
+  },
+  muteBtn: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quote: {
+    textAlign: "center",
+    fontFamily: fonts.body,
+    fontStyle: "italic",
+    color: colors.ink,
+    fontSize: 14,
+    lineHeight: 20,
+    paddingHorizontal: 12,
+    marginBottom: 4,
+  },
   kicker: { fontFamily: fonts.titleBold, letterSpacing: 1.2, color: colors.muted, fontSize: 12 },
+  eftHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  eftVols: { gap: 2, marginBottom: 4 },
+  eftTitleRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  prevBtn: { flexDirection: "row", alignItems: "center", gap: 2, paddingVertical: 6, paddingRight: 8 },
+  nextBtn: { flexDirection: "row", alignItems: "center", gap: 2, paddingVertical: 6, paddingLeft: 8 },
+  nextLab: { fontFamily: fonts.bodyMed, fontSize: 14, color: colors.ink },
   big: { fontFamily: fonts.titleBold, fontSize: 24, color: colors.ink, marginVertical: 8 },
   dots: { flexDirection: "row", justifyContent: "center", gap: 6, marginBottom: 8 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.creamDeep },

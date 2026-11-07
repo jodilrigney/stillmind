@@ -7,6 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ACRONYM } from "../../src/brand";
 import { BrandMark, PrivacyBadge, SettingsSheet } from "../../src/components/ui";
 import { useApp } from "../../src/context/AppProvider";
+import { AFFIRMATIONS } from "../../src/data";
 import { tapLight } from "../../src/haptics";
 import { imgSource, photos } from "../../src/images";
 import { useOscillate } from "../../src/motion";
@@ -17,20 +18,16 @@ const TOOLS = [
   { href: "/tri-calm", letter: "T", word: "Tri-Calm", line: "Balance body, mind and senses.", color: "rgba(244,224,212,0.86)" },
   { href: "/breathe", letter: "I", word: "Inhale", line: "Slow things down with the tide.", color: "rgba(201,217,227,0.86)" },
   { href: "/follow", letter: "L", word: "Lighten", line: "Give my attention to the stream.", color: "rgba(215,226,204,0.86)" },
+  { href: "/ground", letter: "L", word: "Land", line: "Come back to your body.", color: "rgba(231,215,195,0.86)" },
 ];
-
-const LAND = {
-  href: "/ground",
-  letter: "L",
-  word: "Land",
-  line: "Come back to your body.",
-  color: "rgba(231,215,195,0.86)",
-  hold: { href: "/hold", line: "Put it somewhere safe." },
-};
 
 export default function CalmKit() {
   const { session, signOut } = useApp();
   const [sheet, setSheet] = useState(false);
+  const [affirmationIndex, setAffirmationIndex] = useState(() => {
+    const start = Math.floor(Date.now() / 86400000) % AFFIRMATIONS.length;
+    return start;
+  });
   const drift = useOscillate(18000);
   const shift = drift.interpolate({ inputRange: [0, 1], outputRange: [-16, 16] });
   const zoom = drift.interpolate({ inputRange: [0, 1], outputRange: [1.04, 1.1] });
@@ -67,28 +64,26 @@ export default function CalmKit() {
           </Pressable>
         </View>
         <BrandMark />
+        <View style={styles.affirmCard}>
+          <Text style={styles.affirmKicker}>A grounded phrase for today</Text>
+          <Text style={styles.affirm}>{AFFIRMATIONS[affirmationIndex]}</Text>
+          <View style={styles.affirmRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setAffirmationIndex((i) => (i + 1) % AFFIRMATIONS.length)}
+            >
+              <Text style={styles.affirmLink}>Another phrase</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={() => router.push("/(tabs)/track")}>
+              <Text style={styles.affirmLink}>Write gratitude</Text>
+            </Pressable>
+          </View>
+        </View>
         <Text style={styles.ask}>What do you need right now?</Text>
         <View style={styles.tools}>
           {TOOLS.map((t) => (
             <ToolCard key={t.word + t.href} {...t} />
           ))}
-          <View style={[styles.landGroup, shadow.card, { backgroundColor: LAND.color }]}>
-            <ToolCard {...LAND} nested />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Put it somewhere safe"
-              hitSlop={6}
-              onPress={async () => {
-                await tapLight();
-                router.push(LAND.hold.href as never);
-              }}
-              style={styles.landSub}
-            >
-              <Ionicons name="home-outline" size={16} color={colors.sageDeep} />
-              <Text style={styles.landSubText}>{LAND.hold.line}</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.muted} />
-            </Pressable>
-          </View>
         </View>
         <Text style={styles.here}>You're here. StillMind is holding the rest.</Text>
       </ScrollView>
@@ -129,14 +124,12 @@ function ToolCard({
   word,
   line,
   color,
-  nested,
 }: {
   href: string;
   letter: string;
   word: string;
   line: string;
   color: string;
-  nested?: boolean;
 }) {
   return (
     <Pressable
@@ -147,7 +140,7 @@ function ToolCard({
         await tapLight();
         router.push(href as never);
       }}
-      style={[styles.tool, !nested && shadow.card, { backgroundColor: nested ? "transparent" : color, borderWidth: nested ? 0 : 1 }]}
+      style={[styles.tool, shadow.card, { backgroundColor: color }]}
     >
       <View style={styles.letter}>
         <Text style={styles.letterText}>{letter}</Text>
@@ -221,6 +214,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  affirmCard: {
+    marginHorizontal: 18,
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 18,
+    backgroundColor: "rgba(251,249,245,0.78)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.45)",
+  },
+  affirmKicker: { fontFamily: fonts.bodyBold, color: colors.sageDeep, fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase" },
+  affirm: { fontFamily: fonts.title, color: colors.ink, fontSize: 18, lineHeight: 26, marginTop: 7 },
+  affirmRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 10 },
+  affirmLink: { fontFamily: fonts.bodyMed, color: colors.sageDeep, fontSize: 12 },
   ask: {
     textAlign: "center",
     fontFamily: fonts.titleBold,
@@ -249,25 +255,6 @@ const styles = StyleSheet.create({
   letterText: { fontFamily: fonts.titleBold, color: colors.sageDeep },
   toolTitle: { fontFamily: fonts.titleBold, letterSpacing: 0.6, color: colors.ink, fontSize: 13 },
   toolLine: { fontFamily: fonts.body, color: colors.muted, fontSize: 13 },
-  landGroup: {
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.4)",
-    paddingBottom: 8,
-    zIndex: 2,
-  },
-  landSub: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginHorizontal: 14,
-    marginBottom: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    backgroundColor: "rgba(251,249,245,0.55)",
-  },
-  landSubText: { flex: 1, fontFamily: fonts.bodyMed, color: colors.ink, fontSize: 13 },
   here: {
     textAlign: "center",
     marginTop: 16,

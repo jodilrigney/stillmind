@@ -54,8 +54,11 @@ const fill = { flex: 1, width: "100%" as const, height: "100%" as const };
 function PhoneFrame({ children }: { children: React.ReactNode }) {
   const flagged = useAppLandscape();
   const pathname = usePathname();
-  const landscape = flagged || pathname === "/follow" || pathname === "/tri-calm";
   const { width: vw, height: vh } = useWindowDimensions();
+  const deviceLandscape = vw >= vh;
+  // Lighten stays landscape-locked; Tri-Calm starts portrait and follows the phone.
+  const landscape =
+    flagged || pathname === "/follow" || (pathname === "/tri-calm" && deviceLandscape);
   const turn = useRef(new Animated.Value(landscape ? 1 : 0)).current;
 
   useEffect(() => {

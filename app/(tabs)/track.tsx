@@ -12,7 +12,7 @@ import { colors, fonts } from "../../src/theme";
 
 export default function TrackTab() {
   const insets = useSafeAreaInsets();
-  const { checkins, saveCheckIn, meds, saveMeds, medLog, saveMedLog, journal, saveJournal } = useApp();
+  const { checkins, saveCheckIn, meds, saveMeds, medLog, saveMedLog, journal, saveJournal, gratitude, saveGratitude } = useApp();
   const today = store.today();
   const existing = checkins.find((c) => c.date === today);
   const [mood, setMood] = useState(existing?.mood ?? 7);
@@ -27,6 +27,7 @@ export default function TrackTab() {
   const [showMeds, setShowMeds] = useState(false);
   const [customName, setCustomName] = useState("");
   const [customDose, setCustomDose] = useState("");
+  const [thanks, setThanks] = useState(gratitude.find((g) => g.date === today)?.text ?? "");
 
   const moodLabel = mood >= 8 ? "Good" : mood >= 5 ? "Okay" : "Heavy";
 
@@ -45,6 +46,10 @@ export default function TrackTab() {
     await saveCheckIn(row);
     const others = journal.filter((j) => j.date !== today);
     await saveJournal([{ id: store.id(), date: today, text: note, reframe }, ...others]);
+    if (thanks.trim()) {
+      const otherThanks = gratitude.filter((g) => g.date !== today);
+      await saveGratitude([{ id: store.id(), date: today, text: thanks.trim() }, ...otherThanks]);
+    }
   };
 
   const avg = useMemo(() => {
@@ -185,6 +190,24 @@ export default function TrackTab() {
             : null}
         </Card>
 
+        <Card style={{ marginTop: 12 }} color={colors.peachSoft}>
+          <Text style={styles.kicker}>One thing I noticed with thanks</Text>
+          <Text style={styles.soft}>A small, true detail is enough. It does not have to be a big feeling.</Text>
+          <TextInput
+            value={thanks}
+            onChangeText={setThanks}
+            style={styles.input}
+            multiline
+            placeholder="The light on the wall, a warm drink, someone who checked in..."
+            placeholderTextColor={colors.muted}
+          />
+          {gratitude.filter((g) => g.date !== today).slice(0, 4).map((g) => (
+            <Text key={g.id} style={styles.history}>
+              {g.date}: {g.text}
+            </Text>
+          ))}
+        </Card>
+
         <Card style={{ marginTop: 12 }} color="rgba(211,228,235,0.78)">
           <Text style={styles.kicker}>A small place for today</Text>
           <Text style={styles.soft}>
@@ -251,6 +274,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     color: colors.ink,
   },
+  history: { fontFamily: fonts.body, color: colors.muted, fontSize: 12, lineHeight: 17, marginTop: 4 },
   medInput: {
     backgroundColor: colors.linen,
     borderRadius: 14,

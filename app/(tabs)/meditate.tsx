@@ -1,10 +1,10 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { ImageBackground, Pressable, ScrollView, StyleSheet, Text } from "react-native";
+import { Image, ImageBackground, Pressable, ScrollView, StyleSheet, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BrandMark, PrivacyBadge } from "../../src/components/ui";
 import { MEDITATIONS } from "../../src/data";
-import { imgSource, images } from "../../src/images";
+import { ImageKey, imgSource, images } from "../../src/images";
 import { colors, fonts, shadow } from "../../src/theme";
 
 export default function MeditateTab() {
@@ -16,19 +16,22 @@ export default function MeditateTab() {
         <BrandMark compact />
         <Text style={styles.h1}>Guided nature meditations</Text>
         <PrivacyBadge />
-        <Text style={styles.copy}>Short sessions. Words stay on screen with the landscape, and a forest soundtrack if you like.</Text>
+        <Text style={styles.copy}>Short sessions with calm landscapes, relaxing meditation music, and an optional British guidance voice.</Text>
         {MEDITATIONS.map((m) => (
           <Pressable
             key={m.id}
             onPress={() => router.push(`/meditate/${m.id}` as never)}
             style={[styles.card, shadow.card]}
           >
-            <ImageBackground source={imgSource(images[m.imageKey])} style={styles.cover} imageStyle={{ borderRadius: 22 }}>
-              <LinearGradient colors={["transparent", "rgba(40,36,30,0.72)"]} style={styles.coverInner}>
-                <Text style={styles.min}>{m.minutes} min</Text>
-                <Text style={styles.title}>{m.title}</Text>
-              </LinearGradient>
-            </ImageBackground>
+            <Image source={imgSource(images[m.imageKey as ImageKey])} style={styles.coverPhoto} resizeMode="cover" />
+            <LinearGradient
+              colors={["rgba(20,18,14,0.04)", "rgba(20,18,14,0.28)", "rgba(20,18,14,0.82)"]}
+              locations={[0, 0.48, 1]}
+              style={styles.coverInner}
+            >
+              <Text style={styles.min}>{m.minutes} min · {m.theme}</Text>
+              <Text style={styles.title}>{m.title}</Text>
+            </LinearGradient>
           </Pressable>
         ))}
       </ScrollView>
@@ -40,10 +43,24 @@ export default function MeditateTab() {
 const styles = StyleSheet.create({
   brand: { fontFamily: fonts.titleLight, letterSpacing: 8, color: colors.muted },
   h1: { fontFamily: fonts.titleBold, fontSize: 26, color: colors.ink, marginVertical: 8 },
-  copy: { fontFamily: fonts.body, color: colors.muted, marginVertical: 12, lineHeight: 20 },
-  card: { borderRadius: 22, overflow: "hidden", marginBottom: 14, height: 150 },
-  cover: { flex: 1 },
-  coverInner: { flex: 1, justifyContent: "flex-end", padding: 14 },
-  min: { color: colors.paper, fontFamily: fonts.bodyMed, fontSize: 12 },
-  title: { color: colors.paper, fontFamily: fonts.titleBold, fontSize: 22 },
+  copy: { fontFamily: fonts.bodyMed, color: colors.ink, marginVertical: 12, lineHeight: 22, fontSize: 16 },
+  card: { borderRadius: 22, overflow: "hidden", marginBottom: 14, height: 176 },
+  coverPhoto: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
+  coverInner: { flex: 1, justifyContent: "flex-end", padding: 16 },
+  min: {
+    color: "#FBF9F5",
+    fontFamily: fonts.bodyMed,
+    fontSize: 13,
+    textShadowColor: "rgba(20,18,14,0.7)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
+  },
+  title: {
+    color: "#FFFFFF",
+    fontFamily: fonts.titleBold,
+    fontSize: 24,
+    textShadowColor: "rgba(20,18,14,0.75)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 8,
+  },
 });

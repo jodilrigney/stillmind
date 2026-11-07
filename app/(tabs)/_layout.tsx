@@ -61,6 +61,14 @@ export default function TabsLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="health"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name="shield-checkmark-outline" label="Health" focused={focused} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }
@@ -75,10 +83,10 @@ const styles = StyleSheet.create({
   item: {
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingVertical: 8,
     borderRadius: 16,
-    minWidth: 72,
+    minWidth: 60,
   },
   itemOn: { backgroundColor: colors.sageSoft },
   label: { fontFamily: fonts.bodyMed, fontSize: 10, color: colors.muted, marginTop: 2 },
