@@ -274,6 +274,13 @@ export async function stopTone() {
   silenceDom();
 }
 
+export function webNestedMp3Uri(relativeFromAssets: string, source?: unknown) {
+  const fallback = `/assets/?unstable_path=./assets/${relativeFromAssets}`;
+  const resolved = source === undefined ? undefined : playbackUri(source);
+  if (resolved && (resolved.includes("unstable_path=") || resolved.includes(relativeFromAssets))) return resolved;
+  return fallback;
+}
+
 function playbackUri(source: unknown): string | undefined {
   if (typeof source === "string") return source;
   if (typeof source === "number") return Image.resolveAssetSource(source)?.uri;
@@ -1342,15 +1349,15 @@ export async function playFrequencyPad(idOrHz: FrequencyClipId | number, volume 
   const asset = FREQ_ASSETS[clip.id];
 
   if (Platform.OS === "web" && typeof window !== "undefined") {
-    const resolved = Image.resolveAssetSource(asset);
-    const uri = resolved?.uri || `/assets/?unstable_path=./assets/audio/freq/${clip.id}.mp3`;
+    const uri = webNestedMp3Uri(`audio/freq/${clip.id}.mp3`, asset);
     const el = new window.Audio(uri);
     el.loop = true;
+    el.preload = "auto";
     el.volume = vol;
     webFreq = el;
-    try {
-      await el.play();
-    } catch {}
+    const tryPlay = () => el.play().catch(() => {});
+    el.addEventListener("canplay", tryPlay, { once: true });
+    tryPlay();
     return;
   }
 

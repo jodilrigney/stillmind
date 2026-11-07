@@ -8,7 +8,7 @@ import { ScreenHeader } from "../../src/components/ui";
 import { MEDITATIONS } from "../../src/data";
 import { ImageKey, imgSource, images } from "../../src/images";
 import { useSessionAwake } from "../../src/keepAwake";
-import { speakMeditationClip, stopSpeak } from "../../src/speak";
+import { setSpeakVolume, speakMeditationClip, stopSpeak } from "../../src/speak";
 import { colors, fonts } from "../../src/theme";
 
 export default function MeditationSession() {
@@ -18,10 +18,11 @@ export default function MeditationSession() {
   const m = MEDITATIONS.find((x) => x.id === sessionId) || MEDITATIONS[0];
   const [line, setLine] = useState(0);
   const [left, setLeft] = useState(m.minutes * 60);
-  const [on, setOn] = useState(true);
+  const [on, setOn] = useState(false);
   const [musicOn, setMusicOn] = useState(true);
-  const [voiceOn, setVoiceOn] = useState(false);
-  const [volume, setVolume] = useState(0.32);
+  const [voiceOn, setVoiceOn] = useState(true);
+  const [volume, setVolume] = useState(0.46);
+  const voiceVol = Math.max(0, Math.min(1, volume * 0.72));
   const ken = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -52,35 +53,34 @@ export default function MeditationSession() {
 
   useFocusEffect(
     useCallback(() => {
-      stopSpeak();
-      if (!on || !musicOn) {
-        stopTone();
-        stopFrequencyPad();
-        return () => {
-          stopTone();
-          stopFrequencyPad();
-          stopSpeak();
-        };
-      }
-      playFrequencyPad(m.musicId, volume).catch(() => {});
       return () => {
         stopTone();
         stopFrequencyPad();
         stopSpeak();
       };
-    }, [on, musicOn, m.musicId])
+    }, [])
   );
 
   useEffect(() => {
+    if (!on || !musicOn) {
+      stopTone();
+      stopFrequencyPad();
+      return;
+    }
+    playFrequencyPad(m.musicId, volume).catch(() => {});
+  }, [on, musicOn, m.musicId]);
+
+  useEffect(() => {
     setFrequencyPadVolume(volume);
-  }, [volume]);
+    setSpeakVolume(voiceVol);
+  }, [volume, voiceVol]);
 
   useEffect(() => {
     if (!on || !voiceOn) {
       stopSpeak();
       return;
     }
-    speakMeditationClip(`${m.id}-${line}`, 0.9).catch(() => {});
+    speakMeditationClip(`${m.id}-${line}`, voiceVol).catch(() => {});
   }, [line, on, voiceOn, m.id]);
 
   const mm = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
@@ -95,7 +95,7 @@ export default function MeditationSession() {
           resizeMode="cover"
         />
       </Animated.View>
-      <LinearGradient colors={["rgba(244,240,230,0.78)", "rgba(244,240,230,0.18)", "rgba(244,240,230,0.62)"]} style={{ flex: 1 }}>
+      <LinearGradient colors={["rgba(244,240,230,0.42)", "rgba(244,240,230,0.08)", "rgba(244,240,230,0.36)"]} style={{ flex: 1 }}>
         <ScreenHeader title="MEDITATE" subtitle={m.title} />
         <View style={{ flex: 1, justifyContent: "center", padding: 24 }}>
           <View style={styles.script}>
@@ -110,7 +110,17 @@ export default function MeditationSession() {
               accessibilityRole="button"
               accessibilityLabel={on ? "Pause" : "Play"}
               style={[styles.play, !on && styles.playOff]}
-              onPress={() => setOn((v) => !v)}
+              onPress={() => {
+                if (on) {
+                  setOn(false);
+                  stopFrequencyPad();
+                  stopSpeak();
+                  return;
+                }
+                setOn(true);
+                if (musicOn) playFrequencyPad(m.musicId, volume).catch(() => {});
+                if (voiceOn) speakMeditationClip(`${m.id}-${line}`, voiceVol).catch(() => {});
+              }}
             >
               <Ionicons name={on ? "pause" : "play"} size={16} color={on ? colors.linen : colors.sageDeep} />
               <Text style={[styles.playText, !on && styles.playTextOff]}>{on ? "Pause" : "Begin"}</Text>
@@ -119,7 +129,15 @@ export default function MeditationSession() {
               accessibilityRole="button"
               accessibilityState={{ selected: musicOn }}
               style={[styles.toggle, musicOn && styles.toggleOn]}
-              onPress={() => setMusicOn((v) => !v)}
+              onPress={() => {
+                if (musicOn) {
+                  setMusicOn(false);
+                  stopFrequencyPad();
+                  return;
+                }
+                setMusicOn(true);
+                if (on) playFrequencyPad(m.musicId, volume).catch(() => {});
+              }}
             >
               <Ionicons name={musicOn ? "musical-notes" : "musical-notes-outline"} size={16} color={musicOn ? colors.sageDeep : colors.muted} />
               <Text style={[styles.toggleText, musicOn && styles.toggleTextOn]}>Music</Text>
@@ -135,7 +153,7 @@ export default function MeditationSession() {
                   return;
                 }
                 setVoiceOn(true);
-                if (on) speakMeditationClip(`${m.id}-${line}`, 0.9).catch(() => {});
+                if (on) speakMeditationClip(`${m.id}-${line}`, voiceVol).catch(() => {});
               }}
             >
               <Ionicons name={voiceOn ? "mic" : "mic-off-outline"} size={16} color={voiceOn ? colors.sageDeep : colors.muted} />
@@ -162,7 +180,7 @@ export default function MeditationSession() {
 
 const styles = StyleSheet.create({
   script: {
-    backgroundColor: "rgba(251,249,245,0.92)",
+    backgroundColor: "rgba(251,249,245,0.46)",
     borderRadius: 24,
     paddingVertical: 22,
     paddingHorizontal: 20,
@@ -179,7 +197,7 @@ const styles = StyleSheet.create({
   },
   dock: {
     margin: 14,
-    backgroundColor: "rgba(251,249,245,0.78)",
+    backgroundColor: "rgba(251,249,245,0.42)",
     borderRadius: 22,
     padding: 14,
     gap: 12,

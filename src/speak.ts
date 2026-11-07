@@ -1,5 +1,6 @@
 import { Audio } from "expo-av";
-import { Image, Platform } from "react-native";
+import { Platform } from "react-native";
+import { webNestedMp3Uri } from "./audio";
 
 const SOOTHING = { rate: 0.62, pitch: 0.82 };
 
@@ -63,7 +64,7 @@ const MEDITATION_CLIPS: Record<string, number> = {
 };
 
 let voiceSound: Audio.Sound | null = null;
-let webVoice: { pause: () => void; removeAttribute: (name: string) => void } | null = null;
+let webVoice: { pause: () => void; removeAttribute: (name: string) => void; volume: number } | null = null;
 let speakVol = 0.78;
 
 function clampVol(v: number) {
@@ -72,6 +73,7 @@ function clampVol(v: number) {
 
 export function setSpeakVolume(volume: number) {
   speakVol = clampVol(volume);
+  if (webVoice) webVoice.volume = speakVol;
   if (voiceSound) voiceSound.setVolumeAsync(speakVol).catch(() => {});
 }
 
@@ -168,19 +170,17 @@ export async function speakMeditationClip(clipId: string, volume = speakVol) {
   if (!clip) return;
 
   if (Platform.OS === "web" && typeof window !== "undefined") {
-    const resolved = Image.resolveAssetSource(clip);
-    const uri = resolved?.uri || `/assets/?unstable_path=./assets/audio/meditate/${clipId}.mp3`;
+    const uri = webNestedMp3Uri(`audio/meditate/${clipId}.mp3`, clip);
     const el = new window.Audio(uri);
+    el.preload = "auto";
     el.volume = vol;
     webVoice = el;
-    try {
-      await el.play();
-    } catch {
-      // Autoplay can wait for the next Voice tap; never use system speech.
-    }
+    const tryPlay = () => el.play().catch(() => {});
+    el.addEventListener("canplay", tryPlay, { once: true });
     el.addEventListener("ended", () => {
       if (webVoice === el) webVoice = null;
     });
+    tryPlay();
     return;
   }
 
