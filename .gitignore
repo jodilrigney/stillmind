@@ -5,3 +5,5 @@ web-build/
 *.log
 .DS_Store
 expo-env.d.ts
+assets/video/_pick/
+assets/video/ATTRIBUTION.txt
