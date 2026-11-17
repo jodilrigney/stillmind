@@ -1,15 +1,50 @@
 export const EMOTION_TAGS = ["calm", "hopeful", "anxious", "overwhelmed", "motivated", "tired"];
 
+export type SymptomDef = { id: string; label: string };
+
 export const SYMPTOMS = [
   { id: "anxiety", label: "Anxiety" },
   { id: "depression", label: "Depression" },
   { id: "irritability", label: "Irritability" },
   { id: "panic", label: "Panic attacks" },
+  { id: "worry", label: "Worry" },
+  { id: "restlessness", label: "Restlessness" },
   { id: "brainFog", label: "Brain fog" },
   { id: "fatigue", label: "Fatigue" },
   { id: "racing", label: "Racing thoughts" },
   { id: "focus", label: "Concentration" },
+  { id: "tightChest", label: "Tight chest" },
+  { id: "headache", label: "Headache" },
+  { id: "tension", label: "Muscle tension" },
+  { id: "dizziness", label: "Dizziness" },
+  { id: "nausea", label: "Nausea" },
+  { id: "loneliness", label: "Loneliness" },
+  { id: "numbness", label: "Numbness" },
+  { id: "tearfulness", label: "Tearfulness" },
 ];
+
+export function customSymptomId(label: string) {
+  return `custom:${label.trim()}`;
+}
+
+export function symptomName(id: string, extra: SymptomDef[] = []) {
+  return (
+    SYMPTOMS.find((s) => s.id === id)?.label ??
+    extra.find((s) => s.id === id)?.label ??
+    (id.startsWith("custom:") ? id.slice(7) : id)
+  );
+}
+
+export function symptomCatalog(extra: SymptomDef[] = []) {
+  const seen = new Set<string>();
+  const out: SymptomDef[] = [];
+  for (const item of [...SYMPTOMS, ...extra]) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    out.push(item);
+  }
+  return out;
+}
 
 export const COMMON_MEDS = [
   "Sertraline 50mg",
@@ -414,10 +449,11 @@ export type Meditation = {
   title: string;
   minutes: number;
   imageKey: string;
-  musicId: "174" | "396" | "528" | "639" | "741" | "852";
+  musicId: "174" | "396" | "528" | "639" | "741" | "852" | "calming-zen";
   theme: string;
   lineSeconds: number;
   lines: string[];
+  rest: string;
 };
 
 export const MEDITATIONS: Meditation[] = [
@@ -428,7 +464,7 @@ export const MEDITATIONS: Meditation[] = [
     imageKey: "stillLake",
     musicId: "396",
     theme: "Soft music · spacious breathing",
-    lineSeconds: 14,
+    lineSeconds: 22,
     lines: [
       "Let the scene be wider than the thought.",
       "Notice where your body is supported right now.",
@@ -438,6 +474,7 @@ export const MEDITATIONS: Meditation[] = [
       "You do not have to solve what comes next.",
       "Stay with one quiet breath at a time.",
     ],
+    rest: "Rest here. The music can hold you. Nothing more is required.",
   },
   {
     id: "grounding",
@@ -446,7 +483,7 @@ export const MEDITATIONS: Meditation[] = [
     imageKey: "canopy",
     musicId: "174",
     theme: "Gentle music · steady contact",
-    lineSeconds: 16,
+    lineSeconds: 24,
     lines: [
       "Feel the weight of your body being held.",
       "Let your eyes rest on one neutral shape nearby.",
@@ -456,15 +493,16 @@ export const MEDITATIONS: Meditation[] = [
       "Listen for one sound close by and one farther away.",
       "Come back to the contact points.",
     ],
+    rest: "Stay with what is solid. Let the music keep you company.",
   },
   {
     id: "sleep",
     title: "Sleep support",
     minutes: 8,
     imageKey: "alpineLake",
-    musicId: "852",
-    theme: "Quiet music · letting go",
-    lineSeconds: 18,
+    musicId: "calming-zen",
+    theme: "Soft music · letting go",
+    lineSeconds: 32,
     lines: [
       "Dim the inner lights. Nothing has to be finished.",
       "Lengthen the exhale like a tide going out.",
@@ -474,6 +512,7 @@ export const MEDITATIONS: Meditation[] = [
       "If the mind wanders, return to the next slow breath.",
       "Let sleep be optional. Rest is the practice.",
     ],
+    rest: "Remain in the dark quiet. Sleep is optional. Rest is enough.",
   },
   {
     id: "stress",
@@ -482,7 +521,7 @@ export const MEDITATIONS: Meditation[] = [
     imageKey: "stones",
     musicId: "528",
     theme: "Heart-frequency music · unhooking",
-    lineSeconds: 16,
+    lineSeconds: 24,
     lines: [
       "Unhook from the next task for these minutes.",
       "Warm the hands. Loosen the jaw.",
@@ -492,6 +531,7 @@ export const MEDITATIONS: Meditation[] = [
       "Return to the sound of air leaving.",
       "You can return to your life a little wider.",
     ],
+    rest: "Let the effort sit down. Music can carry the rest of this minute.",
   },
   {
     id: "body-scan",
@@ -500,7 +540,7 @@ export const MEDITATIONS: Meditation[] = [
     imageKey: "bodyScan",
     musicId: "741",
     theme: "Dreamlike music · gentle noticing",
-    lineSeconds: 18,
+    lineSeconds: 28,
     lines: [
       "Find a comfortable position. Sitting or lying down both work.",
       "If a part of the body is hard to feel, skip it and stay with what is available.",
@@ -511,6 +551,7 @@ export const MEDITATIONS: Meditation[] = [
       "If sensation is strong, stay with the breath and skip ahead.",
       "Rest in the whole body being here, just as it is.",
     ],
+    rest: "Stay with the whole body, just as it is. No need to go back through it.",
   },
   {
     id: "kindness",
@@ -519,7 +560,7 @@ export const MEDITATIONS: Meditation[] = [
     imageKey: "kindness",
     musicId: "639",
     theme: "Warm music · kind phrases",
-    lineSeconds: 16,
+    lineSeconds: 24,
     lines: [
       "Begin with yourself, using words that feel honest rather than forced.",
       "May I be safe.",
@@ -530,6 +571,7 @@ export const MEDITATIONS: Meditation[] = [
       "If a harder person comes to mind, you can skip that and return to yourself.",
       "Rest in the warmth of one simple wish: may I be well enough for now.",
     ],
+    rest: "Keep one simple wish, if it feels true: may I be well enough for now.",
   },
 ];
 
@@ -543,16 +585,32 @@ export const FEELINGS_WHEEL = [
 ] as const;
 
 export const AFFIRMATIONS = [
-  "I can take this one moment at a time.",
-  "I am learning what helps me feel steadier.",
-  "May I be gentle with the part of me that is trying.",
-  "I can notice a feeling without becoming the whole story.",
-  "I am allowed to rest before I have everything figured out.",
-  "I can come back to my body, even for one breath.",
-  "May I give myself the same patience I would offer a friend.",
-  "I can choose one small kind next step.",
-  "I am here, and that is enough for this moment.",
-  "I can let support in, even a little.",
-  "May I stay curious about what I need.",
-  "I am allowed to begin again, softly.",
+  "I notice what is good around me.",
+  "I am open to ease and warmth today.",
+  "I welcome a peaceful pace.",
+  "Good things are allowed to find me.",
+  "I can enjoy this moment as it is.",
+  "I bring kindness with me.",
+  "I am thankful for simple pleasures.",
+  "I make room for joy.",
+  "I trust my capacity for calm.",
+  "I am growing in ways that feel true.",
+  "I let myself smile at what is already here.",
+  "I carry appreciation into this day.",
+  "Light finds me in ordinary places.",
+  "I am worthy of a good moment.",
+  "I choose a hopeful outlook.",
+  "My care for myself is a strength.",
+  "I am connected to what matters to me.",
+  "Today I look for one bright detail.",
+  "I am glad to be here.",
+  "Something lovely can meet me here.",
+  "I welcome calm in my body and mind.",
+  "I can savor what feels pleasant.",
+  "I am proud of how I show up.",
+  "Kindness toward myself comes naturally.",
+  "I am ready for a little more ease.",
+  "This day holds something good for me.",
+  "I move through today with a light heart.",
+  "I trust that good moments belong here too.",
 ];

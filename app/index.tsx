@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BrandMark, PrivacyBadge } from "../src/components/ui";
 import { useApp } from "../src/context/AppProvider";
+import { AFFIRMATIONS } from "../src/data";
 import { imgSource, images } from "../src/images";
 import { colors, fonts } from "../src/theme";
 
@@ -28,7 +29,15 @@ export default function Welcome() {
     if (ready && welcomed && session) router.replace("/(tabs)");
   }, [ready, welcomed, session]);
 
-  if (!ready) return null;
+  if (!ready || (welcomed && session)) {
+    const line = AFFIRMATIONS[Math.floor(Date.now() / 86400000) % AFFIRMATIONS.length];
+    return (
+      <View style={styles.opening}>
+        <Text style={styles.openingLine}>{line}</Text>
+        <Ionicons name="leaf-outline" size={28} color={colors.sageDeep} />
+      </View>
+    );
+  }
 
   const enter = async (provider: "google-local" | "device") => {
     await signIn({
@@ -42,11 +51,15 @@ export default function Welcome() {
   };
 
   return (
-    <ImageBackground source={imgSource(images.lake)} style={{ flex: 1 }}>
-      <LinearGradient
-        colors={["rgba(231,238,242,0.22)", "rgba(244,240,230,0.38)", "rgba(244,240,230,0.82)"]}
-        style={[styles.wrap, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 20 }]}
-      >
+    <View style={styles.screen}>
+      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <ImageBackground source={imgSource(images.lake)} style={StyleSheet.absoluteFill} />
+        <LinearGradient
+          colors={["rgba(231,238,242,0.22)", "rgba(244,240,230,0.38)", "rgba(244,240,230,0.82)"]}
+          style={StyleSheet.absoluteFill}
+        />
+      </View>
+      <View style={[styles.wrap, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 20 }]}>
         <View style={{ alignItems: "center" }}>
           <PrivacyBadge />
           <View style={{ height: 16 }} />
@@ -103,12 +116,29 @@ export default function Welcome() {
             <Text style={styles.quietText}>Continue without an account</Text>
           </Pressable>
         </View>
-      </LinearGradient>
-    </ImageBackground>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.linen },
+  opening: {
+    flex: 1,
+    backgroundColor: colors.linen,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 36,
+    gap: 18,
+  },
+  openingLine: {
+    fontFamily: fonts.body,
+    fontStyle: "italic",
+    color: colors.ink,
+    fontSize: 18,
+    lineHeight: 26,
+    textAlign: "center",
+  },
   wrap: { flex: 1, justifyContent: "space-between", paddingHorizontal: 22 },
   card: {
     backgroundColor: "rgba(251,249,245,0.86)",
@@ -148,6 +178,6 @@ const styles = StyleSheet.create({
     borderColor: "rgba(61,57,51,0.12)",
   },
   googleText: { fontFamily: fonts.bodyMed, color: colors.ink },
-  quiet: { alignItems: "center", marginTop: 14 },
+  quiet: { alignItems: "center", marginTop: 8, paddingVertical: 12 },
   quietText: { fontFamily: fonts.bodyMed, color: colors.sageDeep },
 });

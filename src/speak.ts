@@ -64,8 +64,10 @@ const MEDITATION_CLIPS: Record<string, number> = {
 };
 
 let voiceSound: Audio.Sound | null = null;
-let webVoice: { pause: () => void; removeAttribute: (name: string) => void; volume: number } | null = null;
+let webVoice: { pause: () => void; play?: () => Promise<void>; removeAttribute: (name: string) => void; volume: number } | null = null;
 let speakVol = 0.78;
+let voiceClipId: string | null = null;
+let voiceStartingId: string | null = null;
 
 function clampVol(v: number) {
   return Math.max(0, Math.min(1, v));
@@ -91,6 +93,7 @@ function pickVoice(voices: SpeechSynthesisVoice[]) {
 }
 
 export async function stopSpeak() {
+  voiceClipId = null;
   if (typeof window !== "undefined" && window.speechSynthesis) {
     window.speechSynthesis.cancel();
   }
@@ -162,12 +165,29 @@ export async function speakSoothing(text: string, pointId?: string, volume = spe
 
 /** Bundled SoniaNeural clips only — never the robotic system voice. */
 export async function speakMeditationClip(clipId: string, volume = speakVol) {
-  await stopSpeak();
   const vol = clampVol(volume);
   speakVol = vol;
-  if (vol <= 0.01) return;
+  if (vol <= 0.01) {
+    voiceStartingId = null;
+    await stopSpeak();
+    return;
+  }
+  if (voiceClipId === clipId && (webVoice || voiceSound)) {
+    if (webVoice) webVoice.volume = vol;
+    webVoice?.play?.().catch(() => {});
+    if (voiceSound) voiceSound.setVolumeAsync(vol).catch(() => {});
+    return;
+  }
+  if (voiceStartingId === clipId) return;
+  voiceStartingId = clipId;
+  await stopSpeak();
+  voiceClipId = clipId;
   const clip = MEDITATION_CLIPS[clipId];
-  if (!clip) return;
+  if (!clip) {
+    voiceStartingId = null;
+    voiceClipId = null;
+    return;
+  }
 
   if (Platform.OS === "web" && typeof window !== "undefined") {
     const uri = webNestedMp3Uri(`audio/meditate/${clipId}.mp3`, clip);
@@ -181,6 +201,7 @@ export async function speakMeditationClip(clipId: string, volume = speakVol) {
       if (webVoice === el) webVoice = null;
     });
     tryPlay();
+    voiceStartingId = null;
     return;
   }
 
@@ -199,4 +220,5 @@ export async function speakMeditationClip(clipId: string, volume = speakVol) {
       }
     });
   } catch {}
+  voiceStartingId = null;
 }

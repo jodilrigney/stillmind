@@ -6,6 +6,7 @@ import {
   Animated,
   Easing,
   GestureResponderEvent,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -14,6 +15,7 @@ import {
 import {
   HARMONY_NOTES,
   holdHarmony,
+  openTriCalm,
   playRhythmBed,
   releaseAllHarmony,
   releaseHarmony,
@@ -23,12 +25,11 @@ import {
   setRhythmVolume,
   stopFrequencyPad,
   stopRhythmBed,
-  stopTone,
+  stopTriCalm,
   type HarmonyVoicing,
   type RhythmBedId,
 } from "../src/audio";
-import { tapHoldPulse, tapSide } from "../src/haptics";
-import { LoopVideo } from "../src/components/LoopVideo";
+import { tapHoldPulse } from "../src/haptics";
 import { imgSource } from "../src/images";
 import { useSessionAwake } from "../src/keepAwake";
 import { useRotatableOnFocus } from "../src/landscape";
@@ -48,31 +49,49 @@ function rhythmWord(rate: number) {
   return "Gentle";
 }
 
+function blockSaveMenu(e: { preventDefault(): void; stopPropagation?: () => void }) {
+  e.preventDefault();
+  e.stopPropagation?.();
+}
+
 export default function TriCalm() {
   useSessionAwake();
   useRotatableOnFocus();
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== "web" || typeof document === "undefined") return;
+      const block = (e: Event) => e.preventDefault();
+      document.addEventListener("contextmenu", block);
+      document.addEventListener("dragstart", block);
+      return () => {
+        document.removeEventListener("contextmenu", block);
+        document.removeEventListener("dragstart", block);
+      };
+    }, [])
+  );
   const [on, setOn] = useState(true);
   const [hapticOn, setHapticOn] = useState(true);
   const [hapticVol, setHapticVol] = useState(0.55);
   const [musicOn, setMusicOn] = useState(true);
   const [musicVol, setMusicVol] = useState(RHYTHM_VOL);
   const [rhythm, setRhythm] = useState(1);
-  const [bedId, setBedId] = useState<RhythmBedId>("still");
+  const [bedId, setBedId] = useState<RhythmBedId>("ember");
   const [voicing, setVoicing] = useState<HarmonyVoicing>("dyad");
   const [photoId, setPhotoId] = useState(TRI_PHOTOS[0]?.id ?? "dock-mist");
+  const [screenOn, setScreenOn] = useState(false);
   const photo = libraryPhoto(photoId);
   const bed = RHYTHM_BEDS.find((b) => b.id === bedId) ?? RHYTHM_BEDS[0];
   const feel = { on: hapticOn, volume: hapticVol };
 
   useFocusEffect(
     useCallback(() => {
-      stopTone();
+      openTriCalm();
+      setScreenOn(true);
       stopFrequencyPad();
       return () => {
-        releaseAllHarmony();
-        stopTone();
+        setScreenOn(false);
+        stopTriCalm();
         stopFrequencyPad();
-        stopRhythmBed();
       };
     }, [])
   );
@@ -82,19 +101,21 @@ export default function TriCalm() {
   }, [on]);
 
   useEffect(() => {
+    if (!screenOn || !on || !musicOn || musicVol <= 0.01) {
+      stopRhythmBed().catch(() => {});
+      return;
+    }
     let alive = true;
-    (async () => {
-      if (!on || !musicOn || musicVol <= 0.01) {
-        await stopRhythmBed();
-        return;
-      }
-      await playRhythmBed(musicVol, rhythm, bedId);
-      if (!alive) await stopRhythmBed();
-    })().catch(() => {});
+    playRhythmBed(musicVol, rhythm, bedId)
+      .then(() => {
+        if (!alive) stopRhythmBed().catch(() => {});
+      })
+      .catch(() => {});
     return () => {
       alive = false;
+      stopRhythmBed().catch(() => {});
     };
-  }, [on, musicOn, bedId]);
+  }, [screenOn, on, musicOn, bedId]);
 
   useEffect(() => {
     if (!musicOn || !on) return;
@@ -109,8 +130,9 @@ export default function TriCalm() {
   const onPressSide = useCallback(
     (side: "L" | "R") => {
       if (!on) return;
-      holdHarmony(side).catch(() => {});
-      tapSide(side, feel);
+      setTimeout(() => {
+        holdHarmony(side).catch(() => {});
+      }, 0);
     },
     [on, hapticOn, hapticVol]
   );
@@ -147,7 +169,6 @@ export default function TriCalm() {
         <Pool
           running={on}
           photo={photo.source}
-          video={photo.video}
           hapticOn={hapticOn}
           hapticVol={hapticVol}
           onPressSide={onPressSide}
@@ -168,6 +189,7 @@ export default function TriCalm() {
               {voicing === "single" ? "E · G bowls" : `${HARMONY_NOTES.L} · ${HARMONY_NOTES.R} bowls`}
             </Text>
             <Text style={styles.topTitle}>Touch the water anywhere</Text>
+            <Text style={styles.topHint}>Hold to let both sides of the body settle.</Text>
           </View>
           <Pressable
             accessibilityRole="button"
@@ -292,7 +314,6 @@ export default function TriCalm() {
 function Pool({
   running,
   photo,
-  video,
   hapticOn,
   hapticVol,
   onPressSide,
@@ -301,7 +322,6 @@ function Pool({
 }: {
   running: boolean;
   photo: number;
-  video?: number;
   hapticOn: boolean;
   hapticVol: number;
   onPressSide: (side: "L" | "R") => void;
@@ -341,17 +361,18 @@ function Pool({
   }, []);
 
   const readTouches = (e: GestureResponderEvent): Thumb[] => {
-    const ne = e.nativeEvent as GestureResponderEvent["nativeEvent"] & {
-      touches?: Array<{ identifier?: number; locationX: number; locationY: number }>;
+    const ne = e?.nativeEvent as GestureResponderEvent["nativeEvent"] & {
+      touches?: ArrayLike<{ identifier?: number; locationX?: number; locationY?: number; clientX?: number; clientY?: number }>;
     };
-    const list = ne.touches && ne.touches.length ? ne.touches : [ne];
-    return list
+    if (!ne) return [];
+    const raw = ne.touches && ne.touches.length ? Array.from(ne.touches) : [ne];
+    return raw
       .map((t, i) => ({
         id: typeof t.identifier === "number" ? t.identifier : i,
-        x: t.locationX,
-        y: t.locationY,
+        x: typeof t.locationX === "number" ? t.locationX : "clientX" in t ? t.clientX : undefined,
+        y: typeof t.locationY === "number" ? t.locationY : "clientY" in t ? t.clientY : undefined,
       }))
-      .filter((t) => Number.isFinite(t.x) && Number.isFinite(t.y));
+      .filter((t): t is Thumb => Number.isFinite(t.x) && Number.isFinite(t.y));
   };
 
   const onStart = (e: GestureResponderEvent) => {
@@ -365,8 +386,8 @@ function Pool({
     added.forEach((t) => {
       if (now - (lastSpawnAt.current.get(t.id) ?? 0) < 50) return;
       lastSpawnAt.current.set(t.id, now);
-      spawn(t.x, t.y);
       tapHoldPulse(sideOf(t.x), { on: hapticOn, volume: hapticVol });
+      spawn(t.x, t.y);
       addSide(sideOf(t.x));
     });
   };
@@ -378,10 +399,10 @@ function Pool({
   };
 
   const onEnd = (e: GestureResponderEvent) => {
-    const ne = e.nativeEvent as GestureResponderEvent["nativeEvent"] & {
-      touches?: Array<{ identifier?: number }>;
+    const ne = e?.nativeEvent as GestureResponderEvent["nativeEvent"] & {
+      touches?: ArrayLike<{ identifier?: number }>;
     };
-    if (!ne.touches || ne.touches.length === 0) {
+    if (!ne?.touches || ne.touches.length === 0) {
       thumbsRef.current = new Map();
       setThumbs([]);
       clearSides();
@@ -408,6 +429,7 @@ function Pool({
   return (
     <Pressable
       style={styles.pool}
+      {...(Platform.OS === "web" ? { onContextMenu: blockSaveMenu } : {})}
       onLayout={(e) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
       onPressIn={(e) => {
         if (!running) return;
@@ -417,11 +439,11 @@ function Pool({
         const now = Date.now();
         if (now - (lastSpawnAt.current.get(id) ?? 0) < 50) return;
         lastSpawnAt.current.set(id, now);
+        tapHoldPulse(sideOf(x), { on: hapticOn, volume: hapticVol });
         const thumb = { id, x, y };
         thumbsRef.current.set(id, thumb);
         setThumbs([...thumbsRef.current.values()]);
         spawn(x, y);
-        tapHoldPulse(sideOf(x), { on: hapticOn, volume: hapticVol });
         addSide(sideOf(x));
       }}
       onPressOut={() => {
@@ -437,17 +459,13 @@ function Pool({
       onTouchEnd={onEnd}
       onTouchCancel={onEnd}
     >
-      {video ? (
-        <View pointerEvents="none" style={[styles.water, { transform: [{ scale: 1.08 }] }]}>
-          <LoopVideo source={video} poster={photo} />
-        </View>
-      ) : (
-        <Animated.Image
-          source={imgSource(photo)}
-          resizeMode="cover"
-          style={[styles.water, { transform: [{ scale: zoom }, { translateX: shift }, { translateY: -18 }] }]}
-        />
-      )}
+      <Animated.Image
+        source={imgSource(photo)}
+        resizeMode="cover"
+        pointerEvents="none"
+        accessible={false}
+        style={[styles.water, { transform: [{ scale: zoom }, { translateX: shift }, { translateY: -18 }] }]}
+      />
       <LinearGradient
         pointerEvents="none"
         colors={["rgba(244,236,220,0.18)", "rgba(231,238,242,0.04)", "rgba(125,163,179,0.12)"]}
@@ -512,13 +530,23 @@ const styles = StyleSheet.create({
     position: "relative",
     justifyContent: "center",
   },
-  pool: { ...StyleSheet.absoluteFillObject, overflow: "hidden" },
+  pool: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: "hidden",
+    // @ts-expect-error web: stop Save image on a hold
+    WebkitTouchCallout: "none",
+    userSelect: "none",
+    touchAction: "none",
+  },
   water: {
     ...StyleSheet.absoluteFillObject,
     width: "120%",
     height: "130%",
     left: "-10%",
     top: "-12%",
+    // @ts-expect-error web: stop Save image on a hold
+    WebkitTouchCallout: "none",
+    userSelect: "none",
   },
   rim: {
     ...StyleSheet.absoluteFillObject,
@@ -564,6 +592,13 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     color: colors.ink,
     fontSize: 13,
+  },
+  topHint: {
+    fontFamily: fonts.body,
+    color: colors.ink,
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 2,
   },
   photoBtn: {
     width: 34,

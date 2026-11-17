@@ -8,12 +8,12 @@ export default function Root({ children }: { children: React.ReactNode }) {
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover"
+          content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover, interactive-widget=resizes-content"
         />
         <ScrollViewStyleReset />
         <style
           dangerouslySetInnerHTML={{
-            __html: `html, body, #root { height: 100%; width: 100%; margin: 0; overflow: hidden; }`,
+            __html: `html, body, #root { height: 100%; height: 100dvh; width: 100%; margin: 0; overflow: hidden; box-sizing: border-box; } img, picture, video, canvas { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-user-drag: none; }`,
           }}
         />
         <title>StillMind</title>

@@ -1,0 +1,10 @@
+Meditation Impromptu 01 by Kevin MacLeod
+Source: https://incompetech.com
+License: Creative Commons Attribution 4.0
+https://creativecommons.org/licenses/by/4.0/
+
+Library pieces in assets/audio/library are Pixabay tracks supplied for StillMind.
+Pixabay Content License. Attribution is not required.
+calming-zen.mp3 — prettyjohn1, Calming Zen
+morning.mp3 — sub_clair, Morning Meditation
+soft-meditation.mp3 — mondamusic, Meditation Music

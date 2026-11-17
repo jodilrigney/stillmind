@@ -15,6 +15,8 @@ const KEYS = {
   supportContacts: "still.supportContacts",
   safetyPlan: "still.safetyPlan",
   gratitude: "still.gratitude",
+  customSymptoms: "still.customSymptoms",
+  summarySaves: "still.summarySaves",
   lightenGuide: "still.lightenGuide",
   settings: "still.settings",
 };
@@ -36,6 +38,12 @@ export type CheckIn = {
   sleepQuality: number;
   nightWakes: boolean;
   hardToSleep: boolean;
+  nightNote?: string;
+};
+
+export type CustomSymptom = {
+  id: string;
+  label: string;
 };
 
 export type Med = {
@@ -63,9 +71,19 @@ export type JournalEntry = {
 export type DoctorNote = {
   id: string;
   date: string;
+  savedAt?: string;
   questions: string;
   updates: string;
   concerns: string;
+};
+
+export type SummarySave = {
+  id: string;
+  savedAt: string;
+  questions: string;
+  updates: string;
+  concerns: string;
+  text: string;
 };
 
 export type ThoughtRecord = {

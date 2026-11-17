@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect, usePathname } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Easing, Image, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Defs, Ellipse, RadialGradient, Rect, Stop } from "react-native-svg";
@@ -28,15 +28,15 @@ function coverRect(bw: number, bh: number, aspect: number, alignY = 0) {
 }
 
 type Mode = "run" | "feel" | "release";
-type SoundMode = "stream" | "forest" | "wind" | "mute";
+type SoundMode = "forest" | "rain" | "frogs" | "mute";
 
 const BED_VOL = 0.28;
-const SOUND_CYCLE: SoundMode[] = ["stream", "forest", "wind", "mute"];
+const SOUND_CYCLE: SoundMode[] = ["forest", "rain", "frogs", "mute"];
 const SOUND_UI: Record<SoundMode, { icon: keyof typeof Ionicons.glyphMap; label: string }> = {
-  stream: { icon: "musical-notes-outline", label: "Calm" },
-  forest: { icon: "leaf-outline", label: "Forest" },
-  wind: { icon: "cloudy-outline", label: "Forest Wind" },
-  mute: { icon: "volume-mute-outline", label: "Mute" },
+  forest: { icon: "leaf-outline", label: "Firefly" },
+  rain: { icon: "rainy-outline", label: "Rain" },
+  frogs: { icon: "moon-outline", label: "Frogs" },
+  mute: { icon: "volume-mute-outline", label: "Quiet" },
 };
 
 function panFromProgress(progress: number) {
@@ -46,6 +46,7 @@ function panFromProgress(progress: number) {
 export default function Follow() {
   useSessionAwake();
   useLandscapeOnFocus();
+  const pathname = usePathname();
   const [box, setBox] = useState({ w: 844, h: 390 });
   const [speed, setSpeed] = useState(0.32);
   const [seconds, setSeconds] = useState(120);
@@ -160,14 +161,6 @@ export default function Follow() {
   useFocusEffect(
     useCallback(() => {
       if (modeRef.current === "run") startSweep();
-      const bedKind = soundModeRef.current;
-      if (bedKind !== "mute") {
-        playPannedBed(bedKind, volumeRef.current)
-          .then(() => setBedPan(panFromProgress(tNow.current)))
-          .catch(() => {});
-      } else {
-        stopBed();
-      }
       return () => {
         stopSweep();
         stopBed();
@@ -176,7 +169,7 @@ export default function Follow() {
   );
 
   useEffect(() => {
-    if (soundMode === "mute") {
+    if (pathname !== "/follow" || soundMode === "mute") {
       stopBed();
       return;
     }
@@ -188,8 +181,9 @@ export default function Follow() {
       .catch(() => {});
     return () => {
       alive = false;
+      stopBed();
     };
-  }, [soundMode]);
+  }, [pathname, soundMode]);
 
   useEffect(() => {
     return () => {
@@ -277,9 +271,9 @@ export default function Follow() {
         </Pressable>
         <Animated.View pointerEvents={chromeUp ? "auto" : "none"} style={[styles.titlePill, { opacity: chrome }]}>
           <Text style={styles.topTitle}>Lighten</Text>
-          {mode === "feel" ? (
-            <Text style={styles.topHint}>Tap anywhere when you're ready to let it go.</Text>
-          ) : null}
+          <Text style={styles.topHint}>
+            {mode === "feel" ? "Tap anywhere when you're ready to let it go." : "Follow the light with your eyes."}
+          </Text>
         </Animated.View>
         <Pressable
           accessibilityRole="button"
@@ -364,6 +358,14 @@ export default function Follow() {
                 }
               }}
             />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open eye tracking, simple EMDR"
+              onPress={() => router.push("/emdr")}
+              style={styles.forestChip}
+            >
+              <Text style={styles.forestText}>Eye tracking</Text>
+            </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`${SOUND_UI[soundMode].label}. Tap to change sound`}

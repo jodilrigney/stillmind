@@ -3,11 +3,22 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { Animated, Image, Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { isBedPlaying, pauseBed, playPannedBed, resumeBed, setBedPan, setBedVolume, stopBed } from "../src/audio";
+import {
+  isBedPlaying,
+  LibraryTrackId,
+  pauseBed,
+  playFrequencyPad,
+  playLibraryBed,
+  resumeBed,
+  setBedPan,
+  setBedVolume,
+  setFrequencyPadVolume,
+  stopBed,
+  stopFrequencyPad,
+} from "../src/audio";
 import { EftGuide } from "../src/components/EftGuide";
 import { PrimaryButton, ScreenHeader } from "../src/components/ui";
 import { EFT_POINTS } from "../src/data";
-import { tapHeavy, tapSide, tapSoft } from "../src/haptics";
 import { imgSource, photos } from "../src/images";
 import { useSessionAwake } from "../src/keepAwake";
 import { GlowDot, useOscillate } from "../src/motion";
@@ -17,8 +28,6 @@ import { colors, fonts } from "../src/theme";
 const TAP_SPEED_MIN = 0.2;
 const TAP_SPEED_MAX = 1;
 const TAP_VOL = 0.32;
-const ZEN_BED = "stream" as const;
-const EFT_BED = "calm" as const;
 const EFT_VOL = 0.28;
 
 function tapMs(speed: number) {
@@ -76,7 +85,7 @@ const MODES: { id: Mode; label: string }[] = [
 function ResetChrome({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void }) {
   return (
     <>
-      <ScreenHeader title="STILL-MIND" subtitle="Somatic Tapping" onBack={() => router.replace("/(tabs)")} />
+      <ScreenHeader title="STILL-MIND" subtitle="Tap one side, then the other. It helps the body settle." onBack={() => router.replace("/(tabs)")} />
       <View style={styles.modes}>
         {MODES.map((m) => (
           <Pressable
@@ -238,6 +247,7 @@ function Bilateral({ chrome }: { chrome: ReactNode }) {
   const [speed, setSpeed] = useState(0.55);
   const [volume, setVolume] = useState(TAP_VOL);
   const [muted, setMuted] = useState(false);
+  const [track] = useState<LibraryTrackId>("calming-zen");
   const volumeRef = useRef(TAP_VOL);
   const lastVolRef = useRef(TAP_VOL);
   const mutedRef = useRef(false);
@@ -250,13 +260,17 @@ function Bilateral({ chrome }: { chrome: ReactNode }) {
   sideRef.current = side;
 
   useEffect(() => {
-    if (running) tapSide(point.side);
     easeTapPan(side);
-  }, [phase, side, running, point.side]);
+  }, [side]);
 
   useEffect(() => {
     if (!running) return;
-    const t = setInterval(() => setSide((n) => (n === 0 ? 1 : 0)), interval);
+    const t = setInterval(() => {
+      const next = sideRef.current === 0 ? 1 : 0;
+      sideRef.current = next;
+      easeTapPan(next);
+      setSide(next);
+    }, interval);
     return () => clearInterval(t);
   }, [running, interval, phase]);
 
@@ -277,23 +291,19 @@ function Bilateral({ chrome }: { chrome: ReactNode }) {
   useEffect(() => {
     let alive = true;
     (async () => {
-      if (!running) {
-        await pauseBed();
+      if (!running || muted) {
+        await stopBed();
         return;
       }
-      if (isBedPlaying()) {
-        await resumeBed();
-        setBedVolume(volumeRef.current, 80);
-        easeTapPan(sideRef.current);
-        return;
-      }
-      await playPannedBed(ZEN_BED, volumeRef.current);
-      if (alive) easeTapPan(sideRef.current);
+      await playLibraryBed(track, volumeRef.current);
+      if (!alive) return;
+      await resumeBed();
+      easeTapPan(sideRef.current);
     })().catch(() => {});
     return () => {
       alive = false;
     };
-  }, [running]);
+  }, [running, track, muted]);
 
   useEffect(() => () => stopBed(), []);
 
@@ -303,7 +313,7 @@ function Bilateral({ chrome }: { chrome: ReactNode }) {
     if (!running) return;
     if (isBedPlaying()) setBedVolume(next, 40);
     else if (next > 0.01) {
-      playPannedBed(ZEN_BED, next)
+      playLibraryBed(track, next)
         .then(() => easeTapPan(sideRef.current))
         .catch(() => {});
     }
@@ -335,30 +345,30 @@ function Bilateral({ chrome }: { chrome: ReactNode }) {
 
   return (
     <View style={styles.bilateralPage}>
-      <Image
-        source={imgSource(photos.tappingCollar)}
-        resizeMode="contain"
-        pointerEvents="none"
-        style={[styles.tappingFig, Platform.OS === "web" ? styles.tappingEdge : null, { opacity: phase === "collar" ? 1 : 0 }]}
-      />
-      <Image
-        source={imgSource(photos.tappingArms)}
-        resizeMode="contain"
-        pointerEvents="none"
-        style={[styles.tappingFig, Platform.OS === "web" ? styles.tappingEdge : null, { opacity: phase === "bicep" ? 1 : 0 }]}
-      />
       {chrome}
-      <View style={styles.bodyRow}>
-        <Text style={[styles.sideLab, side === 0 && styles.sideLabOn]}>{sideLabel}</Text>
-        <View style={styles.bodyWrap}>
+      <View style={styles.figureStage}>
+        <View style={styles.figureBox}>
+          <Image
+            source={imgSource(photos.tappingCollar)}
+            resizeMode="contain"
+            pointerEvents="none"
+            style={[styles.tappingFig, Platform.OS === "web" ? styles.tappingEdge : null, { opacity: phase === "collar" ? 1 : 0 }]}
+          />
+          <Image
+            source={imgSource(photos.tappingArms)}
+            resizeMode="contain"
+            pointerEvents="none"
+            style={[styles.tappingFig, Platform.OS === "web" ? styles.tappingEdge : null, { opacity: phase === "bicep" ? 1 : 0 }]}
+          />
           <View style={[styles.glow, phase === "collar" ? styles.glowCollarL : styles.glowArmL]}>
             <GlowDot active={side === 0} size={side === 0 ? 16 : 9} color="rgba(232,168,112,0.95)" />
           </View>
           <View style={[styles.glow, phase === "collar" ? styles.glowCollarR : styles.glowArmR]}>
             <GlowDot active={side === 1} size={side === 1 ? 16 : 9} color="rgba(232,168,112,0.95)" />
           </View>
+          <Text style={[styles.sideLab, styles.sideLabL, side === 0 && styles.sideLabOn]}>{sideLabel}</Text>
+          <Text style={[styles.sideLab, styles.sideLabR, side === 1 && styles.sideLabOn]}>{sideLabel}</Text>
         </View>
-        <Text style={[styles.sideLab, side === 1 && styles.sideLabOn]}>{sideLabel}</Text>
       </View>
       <LinearGradient colors={["rgba(251,249,245,0)", "rgba(251,249,245,0.55)", "rgba(251,249,245,0.88)"]} style={styles.hugDock}>
         <Text style={styles.lead}>Tapping sequences to reduce stress</Text>
@@ -416,23 +426,29 @@ function Bilateral({ chrome }: { chrome: ReactNode }) {
 function Eft() {
   const [i, setI] = useState(0);
   const [voiceOn, setVoiceOn] = useState(false);
-  const [musicOn, setMusicOn] = useState(true);
+  const [musicOn, setMusicOn] = useState(false);
   const [musicVol, setMusicVol] = useState(EFT_VOL);
+  const [track] = useState<LibraryTrackId>("calming-zen");
   const [voiceVol, setVoiceVol] = useState(0.78);
   const musicVolRef = useRef(EFT_VOL);
   const voiceVolRef = useRef(0.78);
   const lastMusicRef = useRef(EFT_VOL);
   const lastVoiceRef = useRef(0.78);
   const point = EFT_POINTS[i];
+  const trackRef = useRef<LibraryTrackId>("soft");
   musicVolRef.current = musicOn ? musicVol : 0;
   voiceVolRef.current = voiceOn ? voiceVol : 0;
+  trackRef.current = track;
+
+  const playTrack = async (next: LibraryTrackId, vol: number) => {
+    await stopBed();
+    await playFrequencyPad(next, vol);
+  };
 
   const nextPoint = () => {
-    tapSoft();
     setI((p) => (p + 1) % EFT_POINTS.length);
   };
   const prevPoint = () => {
-    tapSoft();
     setI((p) => (p - 1 + EFT_POINTS.length) % EFT_POINTS.length);
   };
 
@@ -442,21 +458,18 @@ function Eft() {
       const vol = musicVolRef.current;
       if (vol <= 0.01) {
         await stopBed();
+        await stopFrequencyPad();
         return;
       }
-      if (isBedPlaying()) {
-        setBedVolume(vol, 80);
-        setBedPan(0, 0);
-        return;
-      }
-      await playPannedBed(EFT_BED, vol);
-      if (alive) setBedPan(0, 0);
+      await playTrack(track, vol);
+      if (!alive) return;
     })().catch(() => {});
     return () => {
       alive = false;
       stopBed();
+      stopFrequencyPad();
     };
-  }, [musicOn]);
+  }, [musicOn, track]);
 
   useEffect(() => {
     if (!voiceOn || voiceVolRef.current <= 0.01) {
@@ -471,18 +484,14 @@ function Eft() {
     if (next <= 0.01) {
       setMusicOn(false);
       setMusicVol(0);
-      setBedVolume(0, 40);
+      setFrequencyPadVolume(0);
       return;
     }
     setMusicOn(true);
     lastMusicRef.current = next;
     setMusicVol(next);
-    if (isBedPlaying()) setBedVolume(next, 40);
-    else {
-      playPannedBed(EFT_BED, next)
-        .then(() => setBedPan(0, 0))
-        .catch(() => {});
-    }
+    if (musicOn) setFrequencyPadVolume(next);
+    else playFrequencyPad(trackRef.current, next).catch(() => {});
   };
 
   const applyVoiceVol = (next: number) => {
@@ -503,15 +512,13 @@ function Eft() {
     if (musicOn) {
       if (musicVol > 0.01) lastMusicRef.current = musicVol;
       setMusicOn(false);
-      setBedVolume(0, 40);
+      setFrequencyPadVolume(0);
       return;
     }
     const v = lastMusicRef.current > 0.01 ? lastMusicRef.current : EFT_VOL;
     setMusicOn(true);
     setMusicVol(v);
-    playPannedBed(EFT_BED, v)
-      .then(() => setBedPan(0, 0))
-      .catch(() => {});
+    playTrack(trackRef.current, v).catch(() => {});
   };
 
   const toggleVoice = () => {
@@ -560,23 +567,6 @@ function Eft() {
         </View>
         <View style={styles.eftVols}>
           <MiniSlider
-            label="Music"
-            accessibilityLabel="Music volume"
-            value={musicOn ? musicVol : 0}
-            step={0.06}
-            onChange={applyMusicVol}
-            trailing={
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={musicOn ? "Mute music" : "Unmute music"}
-                onPress={toggleMusic}
-                style={styles.muteBtn}
-              >
-                <Ionicons name={musicOn ? "musical-notes-outline" : "volume-mute-outline"} size={16} color={colors.ink} />
-              </Pressable>
-            }
-          />
-          <MiniSlider
             label="Voice"
             accessibilityLabel="Voice volume"
             value={voiceOn ? voiceVol : 0}
@@ -590,6 +580,23 @@ function Eft() {
                 style={styles.muteBtn}
               >
                 <Ionicons name={voiceOn ? "volume-high-outline" : "volume-mute-outline"} size={16} color={colors.ink} />
+              </Pressable>
+            }
+          />
+          <MiniSlider
+            label="Music"
+            accessibilityLabel="Music volume"
+            value={musicOn ? musicVol : 0}
+            step={0.06}
+            onChange={applyMusicVol}
+            trailing={
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={musicOn ? "Mute music" : "Unmute music"}
+                onPress={toggleMusic}
+                style={styles.muteBtn}
+              >
+                <Ionicons name={musicOn ? "musical-notes-outline" : "volume-mute-outline"} size={16} color={colors.ink} />
               </Pressable>
             }
           />
@@ -629,7 +636,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tappingFig: {
-    position: "absolute",
+    ...StyleSheet.absoluteFillObject,
     width: "100%",
     height: "100%",
     backgroundColor: "transparent",
@@ -638,31 +645,35 @@ const styles = StyleSheet.create({
     // @ts-expect-error web-only: soften silhouette without blurring the drawing
     filter: "drop-shadow(0 0 4px rgba(251, 249, 245, 0.55)) drop-shadow(0 0 10px rgba(247, 246, 242, 0.32))",
   },
-  bodyRow: {
+  figureStage: {
     flex: 1,
-    flexDirection: "row",
+    minHeight: 0,
     alignItems: "center",
-    paddingHorizontal: 8,
-    gap: 4,
+    justifyContent: "center",
   },
-  bodyWrap: {
-    flex: 1,
-    height: "70%",
+  figureBox: {
+    width: "100%",
+    aspectRatio: 719 / 936,
     position: "relative",
   },
   glow: {
     position: "absolute",
     width: 44,
     height: 44,
+    marginLeft: -22,
+    marginTop: -22,
     alignItems: "center",
     justifyContent: "center",
+    zIndex: 2,
   },
-  glowCollarL: { left: "6%", top: "30%" },
-  glowCollarR: { right: "6%", top: "30%" },
-  glowArmL: { left: "-24%", top: "72%" },
-  glowArmR: { right: "-24%", top: "72%" },
+  glowCollarL: { left: "31%", top: "39%" },
+  glowCollarR: { left: "69%", top: "39%" },
+  glowArmL: { left: "17%", top: "55%" },
+  glowArmR: { left: "83%", top: "55%" },
   sideLab: {
+    position: "absolute",
     width: 72,
+    zIndex: 2,
     fontFamily: fonts.body,
     fontSize: 11,
     lineHeight: 15,
@@ -671,6 +682,8 @@ const styles = StyleSheet.create({
     textShadowColor: "rgba(255,252,245,0.9)",
     textShadowRadius: 8,
   },
+  sideLabL: { left: 0, top: "36%" },
+  sideLabR: { right: 0, top: "36%" },
   sideLabOn: {
     color: colors.ink,
     fontFamily: fonts.bodyMed,
@@ -820,6 +833,24 @@ const styles = StyleSheet.create({
   },
   kicker: { fontFamily: fonts.titleBold, letterSpacing: 1.2, color: colors.muted, fontSize: 12 },
   eftHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  eftTracks: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 2,
+    marginBottom: 4,
+    marginLeft: 96,
+  },
+  eftTrack: {
+    borderRadius: 999,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    alignItems: "center",
+    backgroundColor: "rgba(251,249,245,0.8)",
+  },
+  eftTrackOn: { backgroundColor: colors.sageSoft },
+  eftTrackText: { fontFamily: fonts.bodyMed, fontSize: 12, color: colors.ink },
+  eftTrackTextOn: { color: colors.sageDeep },
   eftVols: { gap: 2, marginBottom: 4 },
   eftTitleRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   prevBtn: { flexDirection: "row", alignItems: "center", gap: 2, paddingVertical: 6, paddingRight: 8 },

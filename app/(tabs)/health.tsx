@@ -1,6 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
 import { useState } from "react";
 import {
   ImageBackground,
@@ -97,6 +96,7 @@ export default function HealthTab() {
         >
           <BrandMark compact />
           <Text style={styles.h1}>Health & Safety</Text>
+          <Text style={styles.lead}>Keep the people and places that help you in one easy spot.</Text>
           <PrivacyBadge />
           <View style={styles.regionRow}>
             {(["Canada", "United States"] as const).map((region) => (
@@ -247,17 +247,6 @@ export default function HealthTab() {
             />
           </Card>
 
-          <Pressable accessibilityRole="button" onPress={() => router.push("/brain-health")} style={styles.healthLink}>
-            <View style={styles.healthIcon}>
-              <Ionicons name="nutrition-outline" size={22} color={colors.sageDeep} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.healthLinkTitle}>Brain Health guide</Text>
-              <Text style={styles.healthLinkCopy}>Food, nutrients, herbs, evidence, and safety cautions</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-          </Pressable>
-
           <Text style={styles.disclaimer}>
             StillMind is supportive, not emergency or medical care. Hotline availability can change; if a call does not connect and danger is immediate, contact local emergency services.
           </Text>
@@ -300,7 +289,8 @@ function ContactInput({
 }
 
 const styles = StyleSheet.create({
-  h1: { fontFamily: fonts.titleBold, fontSize: 26, color: colors.ink, marginVertical: 8 },
+  h1: { fontFamily: fonts.titleBold, fontSize: 26, color: colors.ink, marginTop: 8, marginBottom: 4 },
+  lead: { fontFamily: fonts.body, color: colors.ink, fontSize: 15, lineHeight: 22, marginBottom: 10 },
   card: { marginTop: 12 },
   urgentKicker: { fontFamily: fonts.bodyBold, color: "#8A5148", fontSize: 11, letterSpacing: 1.3 },
   title: { fontFamily: fonts.titleBold, color: colors.ink, fontSize: 21, marginTop: 4 },
@@ -364,17 +354,5 @@ const styles = StyleSheet.create({
   input: { minHeight: 43, borderRadius: 13, paddingHorizontal: 11, backgroundColor: "rgba(251,249,245,0.78)", fontFamily: fonts.body, color: colors.ink },
   inputTall: { minHeight: 70, paddingTop: 10, textAlignVertical: "top" },
   requiredHint: { fontFamily: fonts.body, color: colors.muted, fontSize: 11, marginBottom: 9 },
-  healthLink: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 11,
-    marginTop: 14,
-    padding: 14,
-    borderRadius: 18,
-    backgroundColor: "rgba(251,249,245,0.8)",
-  },
-  healthIcon: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: colors.sageSoft },
-  healthLinkTitle: { fontFamily: fonts.titleBold, color: colors.ink, fontSize: 15 },
-  healthLinkCopy: { fontFamily: fonts.body, color: colors.muted, fontSize: 11, marginTop: 2 },
   disclaimer: { fontFamily: fonts.body, color: colors.muted, fontSize: 11, lineHeight: 16, marginTop: 16 },
 });

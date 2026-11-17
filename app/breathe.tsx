@@ -7,9 +7,12 @@ import {
   FREQUENCY_CLIPS,
   FrequencyClipId,
   playFrequencyPad,
+  readFrequencyPadProgress,
+  seekFrequencyPad,
   setFrequencyPadVolume,
   stopFrequencyPad,
   stopTone,
+  webNestedMp3Uri,
 } from "../src/audio";
 import { ScreenHeader } from "../src/components/ui";
 import { imgSource, photos } from "../src/images";
@@ -30,7 +33,7 @@ export default function Breathe() {
   const [step, setStep] = useState(0);
   const [count, setCount] = useState(PATTERNS.box.steps[0]);
   const [freqId, setFreqId] = useState<FrequencyClipId | null>("528");
-  const [musicOn, setMusicOn] = useState(true);
+  const [musicOn, setMusicOn] = useState(false);
   const [musicVol, setMusicVol] = useState(FREQ_VOL);
   const scale = useRef(new Animated.Value(0.78)).current;
   const freqScrollRef = useRef<ScrollView>(null);
@@ -38,11 +41,19 @@ export default function Breathe() {
   const drift = useOscillate(18000);
   const pattern = PATTERNS[mode];
   const name = pattern.names[step % pattern.names.length];
-  const activeFreq = FREQUENCY_CLIPS.find((c) => c.id === freqId) ?? null;
+  const breathClips = FREQUENCY_CLIPS.filter(
+    (clip) => clip.id !== "calming-zen" && clip.id !== "morning" && clip.id !== "soft" && clip.id !== "396"
+  );
+  const activeFreq = breathClips.find((c) => c.id === freqId) ?? null;
 
   const inhale = name === "Inhale";
   const exhale = name === "Exhale";
   const breathCue = inhale ? "Expand" : exhale ? "Let the tide go out" : "Soft pause";
+
+  useEffect(() => {
+    const uri = webNestedMp3Uri("audio/freq/852.mp3");
+    fetch(uri).catch(() => {});
+  }, []);
 
   useEffect(() => {
     setStep(0);
@@ -71,6 +82,7 @@ export default function Breathe() {
     })().catch(() => {});
     return () => {
       alive = false;
+      stopFrequencyPad();
     };
   }, [musicOn, activeFreq]);
 
@@ -102,9 +114,40 @@ export default function Breathe() {
     }).start();
   }, [step, inhale, name, pattern.steps, scale]);
 
+  const [progress, setProgress] = useState(0);
+  const dragging = useRef(false);
+  const trackW = useRef(1);
   const clock = useMemo(() => `0:${String(count).padStart(2, "0")}`, [count]);
   const shift = drift.interpolate({ inputRange: [0, 1], outputRange: [-20, 20] });
   const zoom = drift.interpolate({ inputRange: [0, 1], outputRange: [1.12, 1.2] });
+
+  useEffect(() => {
+    if (!musicOn || !activeFreq) {
+      setProgress(0);
+      return;
+    }
+    let on = true;
+    const read = async () => {
+      if (!on || dragging.current) return;
+      const times = await readFrequencyPadProgress();
+      if (!on || !times || times.duration <= 0) return;
+      setProgress(times.position / times.duration);
+    };
+    read().catch(() => {});
+    const t = setInterval(() => {
+      read().catch(() => {});
+    }, 400);
+    return () => {
+      on = false;
+      clearInterval(t);
+    };
+  }, [musicOn, activeFreq]);
+
+  const seekAt = (x: number) => {
+    const ratio = Math.max(0, Math.min(1, x / Math.max(1, trackW.current)));
+    setProgress(ratio);
+    seekFrequencyPad(ratio).catch(() => {});
+  };
 
   const scrollFreqIntoView = useCallback((id: FrequencyClipId, animated = true) => {
     const x = chipX.current[id];
@@ -143,7 +186,7 @@ export default function Breathe() {
         style={[styles.backdrop, { transform: [{ scale: zoom }, { translateX: shift }] }]}
       />
       <LinearGradient colors={["rgba(231,238,242,0.22)", "rgba(244,240,230,0.38)", "rgba(244,240,230,0.82)"]} style={{ flex: 1 }}>
-        <ScreenHeader title="INHALE" subtitle="Mindful Breathing" />
+        <ScreenHeader title="INHALE" subtitle="Follow the word in the circle. Breathe with the count underneath." />
         <View style={styles.body}>
           <View style={styles.lift} />
           <View style={styles.center}>
@@ -165,6 +208,9 @@ export default function Breathe() {
                   />
                 </LinearGradient>
               </Animated.View>
+              <View pointerEvents="none" style={styles.bubbleWords}>
+                <Text style={styles.bubbleName}>{name}</Text>
+              </View>
             </View>
             <Text style={styles.clock}>{clock}</Text>
             <Text style={styles.hint}>{breathCue}</Text>
@@ -188,7 +234,7 @@ export default function Breathe() {
 
           <View style={styles.bottom}>
           <View style={styles.freqHead}>
-            <Text style={styles.freqTitle}>Frequency music</Text>
+            <Text style={styles.freqTitle}>Music library</Text>
             <View style={styles.musicControls}>
               <Pressable
                 accessibilityRole="button"
@@ -234,17 +280,39 @@ export default function Breathe() {
               {activeFreq.title} · {activeFreq.heals}
             </Text>
           ) : musicOn ? (
-            <Text style={styles.freqNow}>Choose a frequency below</Text>
+            <Text style={styles.freqNow}>Choose a piece below</Text>
           ) : (
             <Text style={styles.freqNow}>Music is off</Text>
           )}
+          {musicOn && activeFreq ? (
+            <View
+              accessibilityRole="adjustable"
+              accessibilityLabel="Music position. Drag to move forward or back."
+              style={styles.playLine}
+              onLayout={(e) => {
+                trackW.current = e.nativeEvent.layout.width;
+              }}
+              onStartShouldSetResponder={() => true}
+              onMoveShouldSetResponder={() => true}
+              onResponderGrant={(e) => {
+                dragging.current = true;
+                seekAt(e.nativeEvent.locationX);
+              }}
+              onResponderMove={(e) => seekAt(e.nativeEvent.locationX)}
+              onResponderRelease={() => {
+                dragging.current = false;
+              }}
+            >
+              <View style={[styles.playFill, { width: `${Math.round(progress * 100)}%` }]} />
+            </View>
+          ) : null}
           <ScrollView
             ref={freqScrollRef}
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.freqRow}
           >
-            {FREQUENCY_CLIPS.map((clip) => {
+            {breathClips.map((clip) => {
               const on = musicOn && freqId === clip.id;
               return (
                 <Pressable
@@ -296,6 +364,19 @@ const styles = StyleSheet.create({
     height: 168,
     alignItems: "center",
     justifyContent: "center",
+  },
+  bubbleWords: {
+    position: "absolute",
+    width: 120,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+  },
+  bubbleName: {
+    fontFamily: fonts.titleBold,
+    color: colors.ink,
+    fontSize: 22,
+    textAlign: "center",
   },
   ringOuter: {
     position: "absolute",
@@ -408,7 +489,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   nudgeText: { fontFamily: fonts.bodyMed, color: colors.ink, fontSize: 14, lineHeight: 16 },
-  freqNow: { fontFamily: fonts.body, color: colors.ink, fontSize: 13 },
+  freqNow: { fontFamily: fonts.body, color: colors.ink, fontSize: 13, marginBottom: 8 },
+  playLine: {
+    alignSelf: "stretch",
+    height: 22,
+    justifyContent: "center",
+    marginBottom: 8,
+    backgroundColor: "rgba(61,57,51,0.12)",
+    borderRadius: 11,
+    overflow: "hidden",
+  },
+  playFill: {
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.sage,
+  },
   freqRow: { gap: 8, paddingVertical: 2, paddingRight: 36, paddingLeft: 2 },
   freqChip: {
     width: 136,

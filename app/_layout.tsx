@@ -16,9 +16,11 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef } from "react";
 import { Animated, Easing, Platform, useWindowDimensions, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { stopPannedBed, stopTriCalm } from "../src/audio";
 import { AppProvider } from "../src/context/AppProvider";
 import { useAppLandscape } from "../src/landscape";
 import { colors } from "../src/theme";
+import { useBottomGap } from "../src/useBottomGap";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -51,14 +53,25 @@ export default function RootLayout() {
 
 const fill = { flex: 1, width: "100%" as const, height: "100%" as const };
 
+function ScreenShell({ children, bottomGap }: { children: React.ReactNode; bottomGap: number }) {
+  return (
+    <View style={[fill, { backgroundColor: colors.linen }]}>
+      <View style={fill}>{children}</View>
+      {bottomGap > 0 ? <View style={{ height: bottomGap, backgroundColor: colors.linen }} /> : null}
+    </View>
+  );
+}
+
 function PhoneFrame({ children }: { children: React.ReactNode }) {
   const flagged = useAppLandscape();
   const pathname = usePathname();
   const { width: vw, height: vh } = useWindowDimensions();
+  const bottomGap = useBottomGap();
   const deviceLandscape = vw >= vh;
+  const phoneWeb = Platform.OS === "web" && vw > 0 && vw < 700;
   // Lighten stays landscape-locked; Tri-Calm starts portrait and follows the phone.
   const landscape =
-    flagged || pathname === "/follow" || (pathname === "/tri-calm" && deviceLandscape);
+    flagged || pathname === "/follow" || pathname === "/emdr" || (pathname === "/tri-calm" && deviceLandscape);
   const turn = useRef(new Animated.Value(landscape ? 1 : 0)).current;
 
   useEffect(() => {
@@ -70,12 +83,22 @@ function PhoneFrame({ children }: { children: React.ReactNode }) {
     }).start();
   }, [landscape, turn]);
 
+  useEffect(() => {
+    if (pathname !== "/follow") stopPannedBed();
+    if (pathname !== "/tri-calm") stopTriCalm();
+  }, [pathname]);
+
   if (Platform.OS !== "web") {
     return <View style={[fill, { backgroundColor: colors.linen }]}>{children}</View>;
   }
 
+  // Real phones: fill the screen and keep a strip clear for Back / Home.
+  if (phoneWeb && !(landscape && vh > vw)) {
+    return <ScreenShell bottomGap={bottomGap}>{children}</ScreenShell>;
+  }
+
   if (landscape && vw >= vh) {
-    return <View style={[fill, { backgroundColor: colors.linen }]}>{children}</View>;
+    return <ScreenShell bottomGap={phoneWeb ? bottomGap : 0}>{children}</ScreenShell>;
   }
 
   if (landscape && vh > vw) {

@@ -3,7 +3,9 @@ import { router } from "expo-router";
 import { Image, ImageBackground, Pressable, ScrollView, StyleSheet, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BrandMark, PrivacyBadge } from "../../src/components/ui";
+import { playFrequencyPad } from "../../src/audio";
 import { MEDITATIONS } from "../../src/data";
+import { speakMeditationClip } from "../../src/speak";
 import { ImageKey, imgSource, images } from "../../src/images";
 import { colors, fonts, shadow } from "../../src/theme";
 
@@ -15,12 +17,18 @@ export default function MeditateTab() {
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 16, padding: 18, paddingBottom: 120 }}>
         <BrandMark compact />
         <Text style={styles.h1}>Guided nature meditations</Text>
+        <Text style={styles.copy}>Choose a short session. Music and a calm voice can play together.</Text>
         <PrivacyBadge />
-        <Text style={styles.copy}>Short sessions with calm landscapes, relaxing meditation music, and an optional British guidance voice.</Text>
         {MEDITATIONS.map((m) => (
           <Pressable
             key={m.id}
-            onPress={() => router.push(`/meditate/${m.id}` as never)}
+            accessibilityRole="button"
+            accessibilityLabel={m.title}
+            onPress={() => {
+              playFrequencyPad(m.musicId, 0.46).catch(() => {});
+              speakMeditationClip(`${m.id}-0`, 0.184).catch(() => {});
+              router.push(`/meditate/${m.id}` as never);
+            }}
             style={[styles.card, shadow.card]}
           >
             <Image source={imgSource(images[m.imageKey as ImageKey])} style={styles.coverPhoto} resizeMode="cover" />
@@ -43,7 +51,7 @@ export default function MeditateTab() {
 const styles = StyleSheet.create({
   brand: { fontFamily: fonts.titleLight, letterSpacing: 8, color: colors.muted },
   h1: { fontFamily: fonts.titleBold, fontSize: 26, color: colors.ink, marginVertical: 8 },
-  copy: { fontFamily: fonts.bodyMed, color: colors.ink, marginVertical: 12, lineHeight: 22, fontSize: 16 },
+  copy: { fontFamily: fonts.body, color: colors.ink, marginTop: 4, marginBottom: 12, lineHeight: 22, fontSize: 15 },
   card: { borderRadius: 22, overflow: "hidden", marginBottom: 14, height: 176 },
   coverPhoto: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
   coverInner: { flex: 1, justifyContent: "flex-end", padding: 16 },

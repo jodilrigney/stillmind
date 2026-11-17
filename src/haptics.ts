@@ -11,7 +11,8 @@ function allowed(feel?: HapticFeel) {
 
 function scaled(ms: number, feel?: HapticFeel) {
   const v = Math.max(0, Math.min(1, feel?.volume ?? 0.7));
-  return Math.max(4, Math.round(ms * v));
+  // Pixel motors ignore pulses of only a few milliseconds.
+  return Math.max(32, Math.round(ms * v));
 }
 
 function webVibrate(pattern: number | number[]) {
@@ -30,6 +31,11 @@ function nativeStyle(feel?: HapticFeel) {
   if (v < 0.34) return Haptics.ImpactFeedbackStyle.Light;
   if (v < 0.7) return Haptics.ImpactFeedbackStyle.Medium;
   return Haptics.ImpactFeedbackStyle.Heavy;
+}
+
+function nativeImpact(style: Haptics.ImpactFeedbackStyle) {
+  if (!hapticsSupported) return;
+  Haptics.impactAsync(style).catch(() => {});
 }
 
 export async function tapLight() {
@@ -65,19 +71,18 @@ export async function tapSoft() {
 
 export async function tapSide(side: "L" | "R", feel?: HapticFeel) {
   if (!allowed(feel)) return;
-  webVibrate(side === "L" ? scaled(14, feel) : scaled(22, feel));
-  if (!hapticsSupported) return;
-  try {
-    await Haptics.impactAsync(nativeStyle(feel));
-  } catch {}
+  webVibrate(side === "L" ? scaled(40, feel) : scaled(52, feel));
+  nativeImpact(nativeStyle(feel));
+}
+
+/** Immediate buzz. Call this inside the tap, before any other work. */
+export function buzzNow(ms = 48) {
+  webVibrate(Math.max(32, ms));
+  nativeImpact(Haptics.ImpactFeedbackStyle.Medium);
 }
 
 export async function tapHoldPulse(side: "L" | "R" = "L", feel?: HapticFeel) {
   if (!allowed(feel)) return;
-  webVibrate(side === "L" ? [0, scaled(8, feel)] : [0, scaled(12, feel)]);
-  if (!hapticsSupported) return;
-  try {
-    if ((feel?.volume ?? 0.7) < 0.34) await Haptics.selectionAsync();
-    else await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  } catch {}
+  webVibrate(side === "L" ? scaled(36, feel) : scaled(44, feel));
+  nativeImpact((feel?.volume ?? 0.7) < 0.34 ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium);
 }

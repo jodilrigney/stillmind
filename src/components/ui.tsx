@@ -28,14 +28,14 @@ export function PrivacyBadge({ compact = false }: { compact?: boolean }) {
   );
 }
 
-export function BrandMark({ compact = false }: { compact?: boolean }) {
+export function BrandMark({ compact = false, showAcronym = true }: { compact?: boolean; showAcronym?: boolean }) {
   return (
     <View style={{ alignItems: "center" }}>
       <Text style={styles.appName}>{APP_NAME}</Text>
       <Text style={styles.mark}>{APP_MARK.split("").join("  ")}</Text>
       {compact ? null : (
         <>
-          <Text style={styles.acronym}>{ACRONYM_LINE}</Text>
+          {showAcronym ? <Text style={styles.acronym}>{ACRONYM_LINE}</Text> : null}
           <Text style={styles.tag}>{TAGLINE}</Text>
         </>
       )}
@@ -305,7 +305,7 @@ const styles = StyleSheet.create({
     color: colors.ink,
     textTransform: "uppercase",
   },
-  sub: { fontFamily: fonts.body, color: colors.muted, fontSize: 13, marginTop: 2 },
+  sub: { fontFamily: fonts.body, color: colors.ink, fontSize: 14, lineHeight: 20, marginTop: 4 },
   dim: { flex: 1, backgroundColor: "rgba(61,57,51,0.28)", justifyContent: "flex-end" },
   sheet: {
     backgroundColor: colors.linen,

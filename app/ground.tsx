@@ -31,32 +31,32 @@ const STEPS = [
   {
     n: 5,
     sense: "SEE",
-    prompt: "Look around you and locate five things you can see.",
-    extra: "I can see the natural light...",
+    prompt: "Look around and name five things you can see.",
+    extra: "ex. The window, a cup, the floor",
   },
   {
     n: 4,
     sense: "TOUCH",
-    prompt: "Notice four things you can feel.",
-    extra: "Cloth, air, chair, floor.",
+    prompt: "Name four things your body is touching.",
+    extra: "ex. Your shirt, the chair, the floor, your hands",
   },
   {
     n: 3,
     sense: "HEAR",
     prompt: "Name three sounds, near or far.",
-    extra: "Water, a bird, the room itself.",
+    extra: "ex. A voice, a fan, traffic outside",
   },
   {
     n: 2,
     sense: "SMELL",
-    prompt: "Find two scents, or imagine a safe one.",
-    extra: "Tea, rain, soap, nothing.",
+    prompt: "Name two scents, or picture a safe one.",
+    extra: "ex. Tea, soap, rain, or nothing right now",
   },
   {
     n: 1,
     sense: "TASTE",
-    prompt: "One taste, or the quiet of your mouth.",
-    extra: "You are here.",
+    prompt: "Notice one taste in your mouth.",
+    extra: "ex. Water, coffee, toothpaste, or a plain mouth",
   },
 ];
 
@@ -71,18 +71,18 @@ export default function Ground() {
   const footScale = breath.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
   const subtitle =
     mode === "hold"
-      ? "Put it somewhere safe"
+      ? "Write it down and set it aside until you want it back."
       : mode === "spark"
-        ? "One tiny move"
+        ? "One small action can brighten how you feel."
         : mode === "anchor"
-          ? "Pressure · contact · present"
-          : "Grounding · notice & settle";
+          ? "Gentle pressure helps you feel where your body is."
+          : "Name what you can see, touch, hear, smell, and taste.";
 
   return (
     <View style={styles.screen}>
       <Image source={imgSource(photos.landWindow)} resizeMode="contain" style={styles.backdrop} />
       <View style={{ flex: 1 }}>
-        <ScreenHeader title="LAND" subtitle={subtitle} />
+        <ScreenHeader title="Grounding" subtitle={subtitle} />
         <View style={styles.modes}>
           {MODES.map((m) => (
             <Pressable
@@ -136,16 +136,29 @@ export default function Ground() {
                     style={styles.input}
                     numberOfLines={1}
                   />
+                </View>
+                <View style={styles.navRow}>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={i < STEPS.length - 1 ? "Next" : "Finish"}
+                    accessibilityLabel="Previous sense"
+                    onPress={() => {
+                      setChecked(Array(5).fill(false));
+                      setI(i > 0 ? i - 1 : 0);
+                    }}
+                    style={styles.navBtn}
+                  >
+                    <Ionicons name="chevron-back" size={18} color={colors.ink} />
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={i < STEPS.length - 1 ? "Next" : "Start again"}
                     onPress={() => {
                       setChecked(Array(5).fill(false));
                       setI(i < STEPS.length - 1 ? i + 1 : 0);
                     }}
-                    style={styles.next}
+                    style={styles.navBtn}
                   >
-                    <Text style={styles.nextText}>{i < STEPS.length - 1 ? "Next" : "Finish"}</Text>
+                    <Ionicons name="chevron-forward" size={18} color={colors.ink} />
                   </Pressable>
                 </View>
               </View>
@@ -209,7 +222,7 @@ function BodyAnchor() {
 
   return (
     <ScrollView style={styles.anchorScroll} contentContainerStyle={styles.anchorContent} showsVerticalScrollIndicator={false}>
-      <Glass style={styles.anchorCard}>
+      <View style={styles.anchorCard}>
         <Text style={styles.anchorEyebrow}>PROPRIOCEPTIVE GROUNDING</Text>
         {done ? (
           <>
@@ -244,11 +257,34 @@ function BodyAnchor() {
                 <View key={index} style={[styles.anchorDot, index === step && styles.anchorDotOn]} />
               ))}
             </View>
-            <PrimaryButton label={step === ANCHORS.length - 1 ? "Finish" : "Next"} onPress={next} />
+            <View style={styles.navRow}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Previous step"
+                onPress={() => {
+                  if (done) {
+                    setDone(false);
+                    return;
+                  }
+                  setStep((current) => Math.max(0, current - 1));
+                }}
+                style={styles.navBtn}
+              >
+                <Ionicons name="chevron-back" size={18} color={colors.ink} />
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={step === ANCHORS.length - 1 ? "Finish" : "Next step"}
+                onPress={next}
+                style={styles.navBtn}
+              >
+                <Ionicons name="chevron-forward" size={18} color={colors.ink} />
+              </Pressable>
+            </View>
           </>
         )}
-        <Text style={styles.anchorSafety}>Use gentle pressure only. Pause or choose another anchor if anything feels uncomfortable.</Text>
-      </Glass>
+        <Text style={styles.anchorSafety}>Use gentle pressure only. Pause or choose another step if anything feels uncomfortable.</Text>
+      </View>
     </ScrollView>
   );
 }
@@ -419,6 +455,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   nextText: { fontFamily: fonts.bodyBold, color: colors.linen, fontSize: 13 },
+  navRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 8 },
+  navBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.linen,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   foot: {
     marginTop: 8,
     flexDirection: "row",
@@ -440,7 +485,7 @@ const styles = StyleSheet.create({
   footCopy: { fontFamily: fonts.body, color: colors.muted, fontSize: 13 },
   anchorScroll: { flex: 1 },
   anchorContent: { flexGrow: 1, justifyContent: "center", paddingHorizontal: 18, paddingVertical: 16 },
-  anchorCard: { backgroundColor: "rgba(251,249,245,0.76)", padding: 22 },
+  anchorCard: { backgroundColor: "rgba(251,249,245,0.96)", padding: 22, borderRadius: 28 },
   anchorEyebrow: { fontFamily: fonts.bodyBold, color: colors.sageDeep, fontSize: 11, letterSpacing: 1.4, marginBottom: 18 },
   anchorHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   anchorIcon: {
@@ -456,13 +501,13 @@ const styles = StyleSheet.create({
   anchorPrompt: { fontFamily: fonts.bodyMed, color: colors.ink, fontSize: 16, lineHeight: 24, marginTop: 10 },
   anchorAlternative: {
     fontFamily: fonts.body,
-    color: colors.muted,
-    fontSize: 13,
-    lineHeight: 19,
+    color: colors.ink,
+    fontSize: 15,
+    lineHeight: 22,
     marginTop: 12,
     padding: 12,
     borderRadius: 14,
-    backgroundColor: "rgba(211,228,235,0.56)",
+    backgroundColor: colors.linen,
   },
   anchorDots: { flexDirection: "row", gap: 7, justifyContent: "center", marginVertical: 20 },
   anchorDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "rgba(61,57,51,0.14)" },

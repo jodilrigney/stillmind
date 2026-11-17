@@ -706,9 +706,16 @@ async function ensureHarmonyEngine() {
   return slot.web;
 }
 
+let triCalmLive = false;
+
 export async function holdHarmony(side: "L" | "R") {
+  if (!triCalmLive) return;
   if (Platform.OS === "web") {
     const engine = await ensureHarmonyEngine();
+    if (!triCalmLive) {
+      stopWebBowl();
+      return;
+    }
     if (!engine?.voices) return;
     const voice = engine.voices[side];
     const now = engine.ctx.currentTime;
@@ -839,16 +846,17 @@ function fadeNativeHarmony(side: "L" | "R", target: number, ms: number) {
   rampNativeHarmony(side, target, ms);
 }
 
-export type BedKind = "stream" | "forest" | "wind" | "calm";
+export type BedKind = "stream" | "forest" | "wind" | "calm" | "rain" | "frogs";
 
 const BED_SR = 22050;
 const BED_SECONDS = 10;
-const BED_REV = 18;
-const BED_ASSETS: Record<BedKind, number> = {
+const BED_REV = 22;
+const BED_ASSETS: Partial<Record<BedKind, number>> = {
   stream: require("../assets/audio/place-of-calm.mp3"),
   forest: require("../assets/audio/forest.mp3"),
   wind: require("../assets/audio/forest-wind.mp3"),
-  calm: require("../assets/audio/quiet-forest.mp3"),
+  // Meditation Impromptu 01 by Kevin MacLeod (incompetech.com), CC BY 4.0.
+  calm: require("../assets/audio/meditation-impromptu-01.mp3"),
 };
 
 type BedState = {
@@ -862,11 +870,20 @@ type BedState = {
   filter: BiquadFilterNode | null;
   gain: GainNode | null;
   buffers: Partial<Record<BedKind, AudioBuffer>>;
+  libBuffers: Partial<Record<string, AudioBuffer>>;
+  clip: string | null;
   wav: Partial<Record<BedKind, string>>;
   samples: Partial<Record<BedKind, Float32Array>>;
   sound: Audio.Sound | null;
   volTimer: ReturnType<typeof setInterval> | null;
 };
+
+let bedSeq = 0;
+let bedWanted = false;
+
+function stillBed(seq: number) {
+  return bedWanted && bedSeq === seq;
+}
 
 const bed: BedState = {
   rev: 0,
@@ -879,6 +896,8 @@ const bed: BedState = {
   filter: null,
   gain: null,
   buffers: {},
+  libBuffers: {},
+  clip: null,
   wav: {},
   samples: {},
   sound: null,
@@ -982,6 +1001,21 @@ function makeAmbientSamples(kind: BedKind, sr = BED_SR, seconds = BED_SECONDS) {
       const swell = 0.92 + 0.08 * Math.sin((2 * Math.PI * 0.04 * i) / sr);
       out[i] = (earth[i] * 0.55 + wind[i] * 0.35 + canopy[i] * 0.1) * swell;
     }
+  } else if (kind === "rain") {
+    const hiss = band(pinkBuf(n, 17), 900, 7000, sr);
+    const body = band(pinkBuf(n, 81), 180, 1600, sr);
+    for (let i = 0; i < n; i++) {
+      const drop = ((i * 17) % 1400) < 2 ? 0.45 : 0;
+      out[i] = hiss[i] * 0.62 + body[i] * 0.28 + drop;
+    }
+  } else if (kind === "frogs") {
+    const night = band(pinkBuf(n, 33), 70, 420, sr);
+    for (let i = 0; i < n; i++) {
+      const t = i / sr;
+      const chirp = Math.sin(2 * Math.PI * 720 * t) * Math.pow(Math.max(0, Math.sin(Math.PI * ((t * 1.6) % 1))), 10);
+      const chirp2 = Math.sin(2 * Math.PI * 540 * t) * Math.pow(Math.max(0, Math.sin(Math.PI * (((t + 0.4) * 1.15) % 1))), 12);
+      out[i] = night[i] * 0.4 + chirp * 0.2 + chirp2 * 0.14;
+    }
   } else if (kind === "forest" || kind === "calm") {
     const air = band(pinkBuf(n, 61), 80, 900, sr);
     const canopy = band(pinkBuf(n, 409), 300, 1600, sr);
@@ -1029,10 +1063,20 @@ function clearBedVolTimer() {
   }
 }
 
+function applyNativeBed(volume: number, pan: number) {
+  if (!bed.sound) return;
+  const vol = Math.max(0, Math.min(1, volume));
+  if (Platform.OS === "android") {
+    bed.sound.setVolumeAsync(vol, clampPan(pan)).catch(() => {});
+    return;
+  }
+  bed.sound.setVolumeAsync(vol).catch(() => {});
+}
+
 function applyBedPan() {
   const pan = clampPan(bed.pan);
   if (bed.panner) bed.panner.pan.value = pan;
-  if (bed.sound) bed.sound.setPanAsync(pan).catch(() => {});
+  applyNativeBed(bed.vol, pan);
 }
 
 function applyBedVolNow(v: number) {
@@ -1044,7 +1088,7 @@ function applyBedVolNow(v: number) {
       bed.gain.gain.value = bed.vol;
     }
   }
-  if (bed.sound) bed.sound.setVolumeAsync(bed.vol).catch(() => {});
+  applyNativeBed(bed.vol, bed.pan);
 }
 
 export function setBedPan(progressOrPan: number, ms = 0) {
@@ -1059,7 +1103,7 @@ export function setBedPan(progressOrPan: number, ms = 0) {
       bed.panner.pan.value = target;
     }
     bed.pan = target;
-    if (bed.sound) bed.sound.setPanAsync(target).catch(() => {});
+    applyNativeBed(bed.vol, target);
     return;
   }
   bed.pan = target;
@@ -1145,23 +1189,39 @@ export async function resumeBed() {
 }
 
 export function stopBed() {
+  bedWanted = false;
+  bedSeq += 1;
   clearBedVolTimer();
   bed.kind = null;
-  if (bed.gain && bed.ctx) {
-    try {
-      const now = bed.ctx.currentTime;
-      bed.gain.gain.cancelScheduledValues(now);
-      bed.gain.gain.setValueAtTime(Math.max(0.0001, bed.gain.gain.value), now);
-      bed.gain.gain.linearRampToValueAtTime(0.0001, now + 0.08);
-    } catch {}
-  }
+  bed.clip = null;
   stopWebSource();
+  const ctx = bed.ctx;
+  bed.ctx = null;
+  bed.gain = null;
+  bed.panner = null;
+  bed.filter = null;
+  if (ctx) {
+    try {
+      void ctx.suspend();
+    } catch {}
+    ctx.close().catch(() => {});
+  }
   stopNativeBed().catch(() => {});
 }
 
+/** Lighten stream/forest/wind only — leaves Calm/Morning/Flow beds alone. */
+export function stopPannedBed() {
+  if (bed.clip) return;
+  if (bed.kind || bed.source || bed.sound || bed.ctx) stopBed();
+}
+
 function bedAssetUri(kind: BedKind) {
-  let uri = playbackUri(BED_ASSETS[kind]);
+  const asset = BED_ASSETS[kind];
+  if (asset == null) return undefined;
+  let uri = playbackUri(asset);
   if (Platform.OS === "web" && uri && uri.includes(".mp3") && !uri.includes("unstable_path=")) {
+    const nested = uri.match(/audio\/freq\/[^/?]+\.mp3/);
+    if (nested) return `/assets/?unstable_path=./assets/${nested[0]}`;
     const file = uri.split("/").pop()?.split("?")[0] || "";
     uri = `/assets/?unstable_path=./assets/audio/${file}`;
   }
@@ -1187,14 +1247,15 @@ async function loadWebBuffer(kind: BedKind, ctx: AudioContext) {
   if (!res.ok) return null;
   const data = await res.arrayBuffer();
   const decoded = await ctx.decodeAudioData(data.slice(0));
-  const buf = mixToMono(ctx, decoded);
+  const buf = kind === "calm" ? decoded : mixToMono(ctx, decoded);
   bed.buffers[kind] = buf;
   return buf;
 }
 
-async function startWebBed(kind: BedKind, volume: number) {
+async function startWebBed(kind: BedKind, volume: number, seq: number) {
   const Ctor = webAudioCtor();
   if (!Ctor) return false;
+  if (!stillBed(seq)) return false;
   if (!bed.ctx) {
     bed.ctx = new Ctor();
     bed.gain = bed.ctx.createGain();
@@ -1206,7 +1267,16 @@ async function startWebBed(kind: BedKind, volume: number) {
   }
   const ctx = bed.ctx;
   if (ctx.state === "suspended") await ctx.resume();
-  const recorded = await loadWebBuffer(kind, ctx);
+  if (!stillBed(seq)) {
+    if (ctx.state === "running") ctx.suspend().catch(() => {});
+    return false;
+  }
+  const generated = kind === "rain" || kind === "frogs";
+  const recorded = generated ? null : await loadWebBuffer(kind, ctx);
+  if (!stillBed(seq)) {
+    if (ctx.state === "running") ctx.suspend().catch(() => {});
+    return false;
+  }
   if (!recorded) {
     const samples = samplesFor(kind);
     const buf = ctx.createBuffer(1, samples.length, BED_SR);
@@ -1217,8 +1287,9 @@ async function startWebBed(kind: BedKind, volume: number) {
     bed.filter.type = "lowpass";
     bed.filter.Q.value = 0.45;
     bed.filter.frequency.value =
-      kind === "stream" ? 12000 : kind === "forest" || kind === "calm" ? 4200 : 1800;
+      kind === "calm" ? 16000 : kind === "stream" ? 12000 : kind === "forest" ? 4200 : kind === "rain" ? 8000 : kind === "frogs" ? 2600 : 1800;
   }
+  if (!stillBed(seq) || bed.ctx !== ctx || ctx.state === "closed") return false;
   stopWebSource();
   const source = ctx.createBufferSource();
   source.buffer = bed.buffers[kind]!;
@@ -1226,15 +1297,29 @@ async function startWebBed(kind: BedKind, volume: number) {
   source.connect(bed.filter ?? bed.panner!);
   bed.gain!.gain.value = Math.max(0.0001, volume);
   bed.panner!.pan.value = clampPan(bed.pan);
-  source.start();
   bed.source = source;
+  if (!stillBed(seq) || bed.ctx !== ctx) {
+    stopWebSource();
+    return false;
+  }
+  try {
+    source.start();
+  } catch {
+    stopWebSource();
+    return false;
+  }
+  if (!stillBed(seq)) {
+    stopWebSource();
+    return false;
+  }
   bed.kind = kind;
   bed.vol = volume;
   return true;
 }
 
-async function startNativeBed(kind: BedKind, volume: number) {
+async function startNativeBed(kind: BedKind, volume: number, seq: number) {
   await stopNativeBed();
+  if (!stillBed(seq)) return;
   try {
     await Audio.setAudioModeAsync({
       allowsRecordingIOS: false,
@@ -1242,15 +1327,24 @@ async function startNativeBed(kind: BedKind, volume: number) {
       staysActiveInBackground: false,
     });
   } catch {}
-  const { sound } = await Audio.Sound.createAsync(BED_ASSETS[kind], {
+  if (!stillBed(seq)) return;
+  const file = BED_ASSETS[kind];
+  const { sound } = await Audio.Sound.createAsync(file ?? { uri: wavFor(kind) }, {
     isLooping: true,
     volume,
     shouldPlay: true,
     progressUpdateIntervalMillis: 500,
+    ...(Platform.OS === "android"
+      ? { androidImplementation: "MediaPlayer", audioPan: clampPan(bed.pan) }
+      : {}),
   });
-  try {
-    await sound.setPanAsync(clampPan(bed.pan));
-  } catch {}
+  if (!stillBed(seq)) {
+    try {
+      await sound.stopAsync();
+      await sound.unloadAsync();
+    } catch {}
+    return;
+  }
   bed.sound = sound;
   bed.kind = kind;
   bed.vol = volume;
@@ -1274,30 +1368,182 @@ export async function playPannedBed(kind: BedKind, volume = 0.34) {
     bed.panner = null;
     bed.filter = null;
     bed.buffers = {};
+    bed.libBuffers = {};
+    bed.clip = null;
     bed.samples = {};
     bed.wav = {};
     bed.kind = null;
     bed.rev = BED_REV;
   }
-  if (bed.kind === kind && (bed.source || bed.sound)) {
+  if (bed.kind === kind && (bed.source || bed.sound) && bedWanted) {
     setBedVolume(volume, 120);
     applyBedPan();
+    if (bed.ctx?.state === "suspended") bed.ctx.resume().catch(() => {});
     return;
   }
+  bedWanted = true;
+  const seq = ++bedSeq;
   bed.vol = volume;
+  bed.clip = null;
   if (Platform.OS === "web") {
     try {
-      const ok = await startWebBed(kind, volume);
-      if (ok) return;
+      const ok = await startWebBed(kind, volume, seq);
+      if (ok || !stillBed(seq)) return;
     } catch {
       /* fall through to wav */
     }
   }
-  await startNativeBed(kind, volume);
+  if (!stillBed(seq)) return;
+  await startNativeBed(kind, volume, seq);
 }
 
-/** Layered meditative beds centered on each solfeggio Hz (pads + soft phrases, not pure tones). */
+/** The downloaded pieces. None has a steady pulse, so they are named by feel rather than BPM. */
+export const LIBRARY_TRACKS = [
+  { id: "calming-zen", title: "Calm", file: "audio/library/calming-zen.mp3" },
+  { id: "morning", title: "Morning", file: "audio/library/morning.mp3" },
+  { id: "soft", title: "Flow", file: "audio/library/soft-meditation.mp3" },
+] as const;
+
+export type LibraryTrackId = (typeof LIBRARY_TRACKS)[number]["id"];
+
+const LIBRARY_ASSETS: Record<LibraryTrackId, number> = {
+  "calming-zen": require("../assets/audio/library/calming-zen.mp3"),
+  morning: require("../assets/audio/library/morning.mp3"),
+  soft: require("../assets/audio/library/soft-meditation.mp3"),
+};
+
+export async function playLibraryBed(id: LibraryTrackId, volume = 0.34) {
+  if (bed.rev !== BED_REV) {
+    stopWebSource();
+    await stopNativeBed();
+    if (bed.ctx) {
+      try {
+        bed.ctx.close();
+      } catch {}
+    }
+    bed.ctx = null;
+    bed.gain = null;
+    bed.panner = null;
+    bed.filter = null;
+    bed.buffers = {};
+    bed.libBuffers = {};
+    bed.samples = {};
+    bed.wav = {};
+    bed.kind = null;
+    bed.clip = null;
+    bed.rev = BED_REV;
+  }
+  if (bed.clip === id && (bed.source || bed.sound) && bedWanted) {
+    setBedVolume(volume, 120);
+    applyBedPan();
+    if (bed.ctx?.state === "suspended") bed.ctx.resume().catch(() => {});
+    return;
+  }
+  const track = LIBRARY_TRACKS.find((item) => item.id === id);
+  if (!track) return;
+  const asset = LIBRARY_ASSETS[id];
+  bedWanted = true;
+  const seq = ++bedSeq;
+  bed.vol = volume;
+  bed.kind = null;
+  bed.clip = id;
+  if (Platform.OS === "web") {
+    const Ctor = webAudioCtor();
+    if (Ctor) {
+      if (!bed.ctx) bed.ctx = new Ctor();
+      const ctx = bed.ctx;
+      if (ctx.state === "suspended") await ctx.resume();
+      if (!stillBed(seq)) {
+        if (ctx.state === "running") ctx.suspend().catch(() => {});
+        return;
+      }
+      if (!bed.gain || !bed.panner || !bed.filter) {
+        bed.gain = ctx.createGain();
+        bed.panner = ctx.createStereoPanner();
+        bed.filter = ctx.createBiquadFilter();
+        bed.filter.connect(bed.panner);
+        bed.panner.connect(bed.gain);
+        bed.gain.connect(ctx.destination);
+      }
+      let buf = bed.libBuffers[id];
+      if (!buf) {
+        const uri = webNestedMp3Uri(track.file, asset);
+        const res = await fetch(uri);
+        if (res.ok) {
+          const decoded = await ctx.decodeAudioData((await res.arrayBuffer()).slice(0));
+          buf = mixToMono(ctx, decoded);
+          bed.libBuffers[id] = buf;
+        }
+      }
+      if (!stillBed(seq)) {
+        if (ctx.state === "running") ctx.suspend().catch(() => {});
+        return;
+      }
+      const filter = bed.filter;
+      const gain = bed.gain;
+      const panner = bed.panner;
+      if (buf && filter && gain && panner) {
+        filter.type = "lowpass";
+        filter.Q.value = 0.45;
+        filter.frequency.value = 16000;
+        if (!stillBed(seq) || bed.ctx !== ctx || ctx.state === "closed") return;
+        stopWebSource();
+        const source = ctx.createBufferSource();
+        source.buffer = buf;
+        source.loop = true;
+        source.connect(filter);
+        gain.gain.value = Math.max(0.0001, volume);
+        panner.pan.value = clampPan(bed.pan);
+        bed.source = source;
+        if (!stillBed(seq) || bed.ctx !== ctx) {
+          stopWebSource();
+          return;
+        }
+        try {
+          source.start();
+        } catch {
+          stopWebSource();
+          return;
+        }
+        return;
+      }
+    }
+  }
+  if (!stillBed(seq)) return;
+  await stopNativeBed();
+  if (!stillBed(seq)) return;
+  try {
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+    });
+  } catch {}
+  if (!stillBed(seq)) return;
+  const { sound } = await Audio.Sound.createAsync(asset, {
+    isLooping: true,
+    volume,
+    shouldPlay: true,
+    ...(Platform.OS === "android"
+      ? { androidImplementation: "MediaPlayer", audioPan: clampPan(bed.pan) }
+      : {}),
+  });
+  if (!stillBed(seq)) {
+    try {
+      await sound.stopAsync();
+      await sound.unloadAsync();
+    } catch {}
+    return;
+  }
+  bed.sound = sound;
+  bed.vol = volume;
+}
+
+/** Layered meditative beds centered on each solfeggio Hz, plus the warmer library pieces. */
 export const FREQUENCY_CLIPS = [
+  { id: "calming-zen", title: "Calm", heals: "Soft zen", note: "Quiet and steady", file: "audio/library/calming-zen.mp3" },
+  { id: "morning", title: "Morning", heals: "Fresh start", note: "Gentle morning", file: "audio/library/morning.mp3" },
+  { id: "soft", title: "Flow", heals: "A lighter mood", note: "Bright and kind", file: "audio/library/soft-meditation.mp3" },
   { id: "174", hz: 174, title: "174 Hz", heals: "Ease the body", note: "Comfort & grounding" },
   { id: "396", hz: 396, title: "396 Hz", heals: "Soften fear", note: "Release & settle" },
   { id: "528", hz: 528, title: "528 Hz", heals: "Heart & repair", note: "Love frequency" },
@@ -1310,6 +1556,9 @@ export type FrequencyClipId = (typeof FREQUENCY_CLIPS)[number]["id"];
 
 /** Siarhei Korbut — Meditation Frequencies (Jamendo / CC BY-NC-ND 3.0). */
 const FREQ_ASSETS: Record<FrequencyClipId, number> = {
+  "calming-zen": require("../assets/audio/library/calming-zen.mp3"),
+  morning: require("../assets/audio/library/morning.mp3"),
+  soft: require("../assets/audio/library/soft-meditation.mp3"),
   "174": require("../assets/audio/freq/174.mp3"),
   "396": require("../assets/audio/freq/396.mp3"),
   "528": require("../assets/audio/freq/528.mp3"),
@@ -1319,45 +1568,70 @@ const FREQ_ASSETS: Record<FrequencyClipId, number> = {
 };
 
 let freqSound: Audio.Sound | null = null;
-let webFreq: { pause: () => void; removeAttribute: (name: string) => void; volume: number } | null = null;
+let webFreq: HTMLAudioElement | null = null;
+let freqPlayingId: string | null = null;
+let freqSeq = 0;
 
-export async function stopFrequencyPad() {
+function silenceFreqNow() {
   if (webFreq) {
     const el = webFreq;
     webFreq = null;
-    el.pause();
-    el.removeAttribute("src");
+    try {
+      el.pause();
+      el.removeAttribute("src");
+      el.load();
+    } catch {}
   }
   if (freqSound) {
     const s = freqSound;
     freqSound = null;
-    try {
-      await s.stopAsync();
-      await s.unloadAsync();
-    } catch {}
+    s.stopAsync().catch(() => {});
+    s.unloadAsync().catch(() => {});
   }
 }
 
+export async function stopFrequencyPad() {
+  freqSeq += 1;
+  freqPlayingId = null;
+  silenceFreqNow();
+}
+
 export async function playFrequencyPad(idOrHz: FrequencyClipId | number, volume = 0.28) {
-  await stopFrequencyPad();
   const vol = Math.max(0.04, Math.min(0.7, volume));
   const clip =
     typeof idOrHz === "number"
-      ? FREQUENCY_CLIPS.find((c) => c.hz === idOrHz)
+      ? FREQUENCY_CLIPS.find((c) => "hz" in c && c.hz === idOrHz)
       : FREQUENCY_CLIPS.find((c) => c.id === idOrHz);
   if (!clip) return;
+  if (freqPlayingId === clip.id && (webFreq || freqSound)) {
+    setFrequencyPadVolume(vol);
+    return;
+  }
+  const seq = ++freqSeq;
+  silenceFreqNow();
+  freqPlayingId = clip.id;
   const asset = FREQ_ASSETS[clip.id];
 
   if (Platform.OS === "web" && typeof window !== "undefined") {
-    const uri = webNestedMp3Uri(`audio/freq/${clip.id}.mp3`, asset);
+    const uri = webNestedMp3Uri("file" in clip ? clip.file : `audio/freq/${clip.id}.mp3`, asset);
     const el = new window.Audio(uri);
     el.loop = true;
     el.preload = "auto";
     el.volume = vol;
     webFreq = el;
-    const tryPlay = () => el.play().catch(() => {});
-    el.addEventListener("canplay", tryPlay, { once: true });
-    tryPlay();
+    const start = () => {
+      if (seq !== freqSeq || webFreq !== el) {
+        el.pause();
+        return;
+      }
+      el.play().catch(() => {});
+    };
+    el.addEventListener("canplay", start, { once: true });
+    if (seq !== freqSeq) {
+      silenceFreqNow();
+      return;
+    }
+    start();
     return;
   }
 
@@ -1368,12 +1642,53 @@ export async function playFrequencyPad(idOrHz: FrequencyClipId | number, volume 
       staysActiveInBackground: false,
     });
   } catch {}
+  if (seq !== freqSeq) return;
   const { sound } = await Audio.Sound.createAsync(asset, {
     isLooping: true,
     volume: vol,
     shouldPlay: true,
   });
+  if (seq !== freqSeq) {
+    sound.stopAsync().catch(() => {});
+    sound.unloadAsync().catch(() => {});
+    return;
+  }
   freqSound = sound;
+}
+
+export function frequencyPadProgress() {
+  if (webFreq && Number.isFinite(webFreq.duration) && webFreq.duration > 0) {
+    return { position: webFreq.currentTime, duration: webFreq.duration };
+  }
+  return null;
+}
+
+export async function readFrequencyPadProgress() {
+  const web = frequencyPadProgress();
+  if (web) return web;
+  if (!freqSound) return null;
+  try {
+    const status = await freqSound.getStatusAsync();
+    if (status.isLoaded && status.durationMillis) {
+      return { position: status.positionMillis / 1000, duration: status.durationMillis / 1000 };
+    }
+  } catch {}
+  return null;
+}
+
+export async function seekFrequencyPad(ratio: number) {
+  const t = Math.max(0, Math.min(0.995, ratio));
+  if (webFreq && Number.isFinite(webFreq.duration) && webFreq.duration > 0) {
+    webFreq.currentTime = t * webFreq.duration;
+    return;
+  }
+  if (!freqSound) return;
+  try {
+    const status = await freqSound.getStatusAsync();
+    if (status.isLoaded && status.durationMillis) {
+      await freqSound.setPositionAsync(t * status.durationMillis);
+    }
+  } catch {}
 }
 
 export function setFrequencyPadVolume(volume: number) {
@@ -1394,20 +1709,65 @@ let rhythmSound: Audio.Sound | null = null;
 let rhythmRate = 1;
 let rhythmVol = 0.2;
 let rhythmBedId: RhythmBedId = "still";
+let rhythmSeq = 0;
+
+async function silenceSound(sound: Audio.Sound | null) {
+  if (!sound) return;
+  try {
+    await sound.setStatusAsync({ shouldPlay: false, volume: 0, isLooping: false });
+  } catch {}
+  try {
+    await sound.stopAsync();
+  } catch {}
+  try {
+    await sound.unloadAsync();
+  } catch {}
+}
+
+function stopNativeHarmonySounds() {
+  (["L", "R"] as const).forEach((side) => {
+    clearNativeFade(side);
+    const sound = nativeHarmony[side].sound;
+    nativeHarmony[side].sound = undefined;
+    nativeHarmony[side].vol = 0;
+    if (!sound) return;
+    bag().sounds.delete(sound);
+    silenceSound(sound).catch(() => {});
+  });
+}
+
+/** Tri-Calm music and bowls. Safe to call from any other screen. */
+export function stopTriCalm() {
+  triCalmLive = false;
+  rhythmSeq += 1;
+  const s = rhythmSound;
+  rhythmSound = null;
+  silenceSound(s).catch(() => {});
+  const slot = bag();
+  if (slot.web?.ctx && slot.web.ctx.state === "running") {
+    slot.web.ctx.suspend().catch(() => {});
+  }
+  stopWebBowl();
+  stopNativeHarmonySounds();
+}
+
+export function openTriCalm() {
+  triCalmLive = true;
+}
 
 export async function stopRhythmBed() {
-  if (rhythmSound) {
-    const s = rhythmSound;
-    rhythmSound = null;
-    try {
-      await s.stopAsync();
-      await s.unloadAsync();
-    } catch {}
-  }
+  rhythmSeq += 1;
+  const s = rhythmSound;
+  rhythmSound = null;
+  await silenceSound(s);
 }
 
 export async function playRhythmBed(volume = 0.26, rate = 1, bedId: RhythmBedId = rhythmBedId) {
-  await stopRhythmBed();
+  if (!triCalmLive) return;
+  const seq = ++rhythmSeq;
+  const prev = rhythmSound;
+  rhythmSound = null;
+  silenceSound(prev).catch(() => {});
   rhythmVol = Math.max(0.04, Math.min(0.65, volume));
   // Keep near natural speed — heavy time-stretch makes the bed waver.
   rhythmRate = Math.max(0.92, Math.min(1.08, rate));
@@ -1420,6 +1780,7 @@ export async function playRhythmBed(volume = 0.26, rate = 1, bedId: RhythmBedId 
       staysActiveInBackground: false,
     });
   } catch {}
+  if (!triCalmLive || seq !== rhythmSeq) return;
   const { sound } = await Audio.Sound.createAsync(asset, {
     isLooping: true,
     volume: rhythmVol,
@@ -1427,6 +1788,10 @@ export async function playRhythmBed(volume = 0.26, rate = 1, bedId: RhythmBedId 
     rate: rhythmRate,
     shouldCorrectPitch: true,
   });
+  if (!triCalmLive || seq !== rhythmSeq) {
+    await silenceSound(sound);
+    return;
+  }
   rhythmSound = sound;
   try {
     await sound.setRateAsync(rhythmRate, true);

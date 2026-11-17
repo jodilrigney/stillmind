@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from "
 import * as Notifications from "expo-notifications";
 import {
   CheckIn,
+  CustomSymptom,
   DoctorNote,
   HeldItem,
   JournalEntry,
@@ -11,6 +12,7 @@ import {
   SafetyPlan,
   Session,
   StuckPoint,
+  SummarySave,
   SupportContact,
   ThoughtRecord,
   loadJson,
@@ -36,10 +38,13 @@ type Ctx = {
   supportContacts: SupportContact[];
   safetyPlan: SafetyPlan;
   gratitude: GratitudeEntry[];
+  customSymptoms: CustomSymptom[];
+  summarySaves: SummarySave[];
   setWelcomed: () => Promise<void>;
   signIn: (session: Session) => Promise<void>;
   signOut: () => Promise<void>;
   saveCheckIn: (c: CheckIn) => Promise<void>;
+  deleteCheckIn: (id: string) => Promise<void>;
   saveMeds: (m: Med[]) => Promise<void>;
   saveMedLog: (m: MedLog[]) => Promise<void>;
   saveJournal: (j: JournalEntry[]) => Promise<void>;
@@ -50,6 +55,8 @@ type Ctx = {
   saveSupportContacts: (contacts: SupportContact[]) => Promise<void>;
   saveSafetyPlan: (plan: SafetyPlan) => Promise<void>;
   saveGratitude: (entries: GratitudeEntry[]) => Promise<void>;
+  saveCustomSymptoms: (entries: CustomSymptom[]) => Promise<void>;
+  saveSummarySaves: (entries: SummarySave[]) => Promise<void>;
 };
 
 const AppContext = createContext<Ctx | null>(null);
@@ -70,10 +77,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [supportContacts, setSupportContacts] = useState<SupportContact[]>([]);
   const [safetyPlan, setSafetyPlan] = useState<SafetyPlan>({ region: "Canada", helps: "", place: "" });
   const [gratitude, setGratitude] = useState<GratitudeEntry[]>([]);
+  const [customSymptoms, setCustomSymptoms] = useState<CustomSymptom[]>([]);
+  const [summarySaves, setSummarySaves] = useState<SummarySave[]>([]);
 
   useEffect(() => {
     (async () => {
-      const [w, s, st, c, m, ml, j, d, t, sp, h, f, contacts, plan, g] = await Promise.all([
+      const [w, s, st, c, m, ml, j, d, t, sp, h, f, contacts, plan, g, cs, ss] = await Promise.all([
         loadJson(store.keys.welcome, false),
         loadJson<Session | null>(store.keys.session, null),
         loadJson<Settings>(store.keys.settings, { haptics: true, keepName: "" }),
@@ -89,6 +98,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         loadJson<SupportContact[]>(store.keys.supportContacts, []),
         loadJson<SafetyPlan>(store.keys.safetyPlan, { region: "Canada", helps: "", place: "" }),
         loadJson<GratitudeEntry[]>(store.keys.gratitude, []),
+        loadJson<CustomSymptom[]>(store.keys.customSymptoms, []),
+        loadJson<SummarySave[]>(store.keys.summarySaves, []),
       ]);
       setWelcomedState(w);
       setSession(s);
@@ -104,6 +115,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setSupportContacts(contacts);
       setSafetyPlan(plan);
       setGratitude(g);
+      setCustomSymptoms(cs);
+      setSummarySaves(ss);
       if (Object.keys(f).length) {
         await Promise.all(
           Object.keys(f).map((id) => Notifications.cancelScheduledNotificationAsync(id).catch(() => {}))
@@ -131,6 +144,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       supportContacts,
       safetyPlan,
       gratitude,
+      customSymptoms,
+      summarySaves,
       setWelcomed: async () => {
         setWelcomedState(true);
         await saveJson(store.keys.welcome, true);
@@ -144,7 +159,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         await saveJson(store.keys.session, null);
       },
       saveCheckIn: async (c) => {
-        const next = [c, ...checkins.filter((x) => x.date !== c.date)];
+        const next = [c, ...checkins.filter((x) => x.date !== c.date && x.id !== c.id)];
+        setCheckins(next);
+        await saveJson(store.keys.checkins, next);
+      },
+      deleteCheckIn: async (id) => {
+        const next = checkins.filter((x) => x.id !== id);
         setCheckins(next);
         await saveJson(store.keys.checkins, next);
       },
@@ -188,6 +208,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setGratitude(entries);
         await saveJson(store.keys.gratitude, entries);
       },
+      saveCustomSymptoms: async (entries) => {
+        setCustomSymptoms(entries);
+        await saveJson(store.keys.customSymptoms, entries);
+      },
+      saveSummarySaves: async (entries) => {
+        setSummarySaves(entries);
+        await saveJson(store.keys.summarySaves, entries);
+      },
     }),
     [
       ready,
@@ -205,6 +233,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       supportContacts,
       safetyPlan,
       gratitude,
+      customSymptoms,
+      summarySaves,
     ]
   );
 

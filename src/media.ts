@@ -23,6 +23,7 @@ export const photos = {
   tappingCollar: require("../assets/images/tapping-collar-v7.png"),
   tappingArms: require("../assets/images/tapping-arms.png"),
   stillLake: require("../assets/images/still-lake-dock.jpg"),
+  stillMist: require("../assets/images/bg-lake-mist.jpg"),
   landWindow: require("../assets/images/land-window.jpg"),
   triCalmPool: require("../assets/library/tri-calm-heic-a.jpg"),
   triCalmMist: require("../assets/library/tri-calm-dock-mist.jpg"),
