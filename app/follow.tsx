@@ -272,7 +272,9 @@ export default function Follow() {
         <Animated.View pointerEvents={chromeUp ? "auto" : "none"} style={[styles.titlePill, { opacity: chrome }]}>
           <Text style={styles.topTitle}>Lighten</Text>
           <Text style={styles.topHint}>
-            {mode === "feel" ? "Tap anywhere when you're ready to let it go." : "Follow the light with your eyes."}
+            {mode === "feel"
+              ? "Helps a looping mind. Keep your eyes on the light, then tap when you are ready to let it go."
+              : "Helps a busy or overloaded mind. Follow the light with your eyes. Keep your head still."}
           </Text>
         </Animated.View>
         <Pressable
@@ -288,6 +290,7 @@ export default function Follow() {
         <View style={styles.guideOverlay}>
           <View style={styles.guideCard}>
             <Text style={styles.guideCardTitle}>How to use Lighten</Text>
+            <Text style={styles.guideCardBody}>This helps when thoughts loop, attention sticks, or the mind will not unhook.</Text>
             <Text style={styles.guideCardBody}>Keep your head facing forward and comfortably still.</Text>
             <Text style={styles.guideCardBody}>Follow the moving light with your eyes, not by turning your neck.</Text>
             <Text style={styles.guideCardBody}>If you like, slowly move the phone left and right while your eyes stay with the light.</Text>
@@ -627,14 +630,11 @@ const styles = StyleSheet.create({
   },
   titlePill: {
     flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
     backgroundColor: "rgba(251,249,245,0.52)",
-    borderRadius: 999,
+    borderRadius: 16,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
+    gap: 2,
   },
   topTitle: {
     fontFamily: fonts.bodyMed,
@@ -642,12 +642,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   topHint: {
-    flex: 1,
-    textAlign: "right",
-    fontFamily: fonts.bodyMed,
-    fontStyle: "italic",
+    fontFamily: fonts.body,
     color: colors.ink,
-    fontSize: 14,
+    fontSize: 13,
+    lineHeight: 18,
   },
   bottomWrap: {
     position: "absolute",

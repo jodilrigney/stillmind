@@ -3,7 +3,6 @@ import { router } from "expo-router";
 import { ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { playFrequencyPad } from "../../src/audio";
-import { speakMeditationClip } from "../../src/speak";
 import { BrandMark, Card, PrivacyBadge } from "../../src/components/ui";
 import { imgSource, images } from "../../src/images";
 import { colors, fonts } from "../../src/theme";
@@ -18,7 +17,7 @@ const EVERYDAY = [
   { href: "/ground", title: "Grounding & body anchor", subtitle: "Senses, pressure, and present-moment support", color: colors.sageSoft },
   { href: "/feelings", title: "Feelings wheel", subtitle: "Find words for emotions and intensity", color: colors.lavenderSoft },
   { href: "/(tabs)", title: "Daily gratitude", subtitle: "Notice and keep the small good things", color: colors.peachSoft },
-  { href: "/meditate/sleep", title: "Sleep support", subtitle: "A gentle guided wind-down", color: colors.waterSoft },
+  { href: "/meditate/sleep", title: "Sleep support", subtitle: "A slow body scan so you can rest", color: colors.waterSoft },
 ];
 
 export default function ToolsTab() {
@@ -53,8 +52,7 @@ export default function ToolsTab() {
               key={item.title}
               onPress={() => {
                 if (item.href === "/meditate/sleep") {
-                  playFrequencyPad("calming-zen", 0.46).catch(() => {});
-                  speakMeditationClip("sleep-0", 0.184).catch(() => {});
+                  playFrequencyPad("calming-zen", 0.48).catch(() => {});
                 }
                 router.push(item.href as never);
               }}

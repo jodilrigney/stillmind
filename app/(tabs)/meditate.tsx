@@ -5,7 +5,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BrandMark, PrivacyBadge } from "../../src/components/ui";
 import { playFrequencyPad } from "../../src/audio";
 import { MEDITATIONS } from "../../src/data";
-import { speakMeditationClip } from "../../src/speak";
 import { ImageKey, imgSource, images } from "../../src/images";
 import { colors, fonts, shadow } from "../../src/theme";
 
@@ -25,8 +24,7 @@ export default function MeditateTab() {
             accessibilityRole="button"
             accessibilityLabel={m.title}
             onPress={() => {
-              playFrequencyPad(m.musicId, 0.46).catch(() => {});
-              speakMeditationClip(`${m.id}-0`, 0.184).catch(() => {});
+              playFrequencyPad(m.musicId, 0.48).catch(() => {});
               router.push(`/meditate/${m.id}` as never);
             }}
             style={[styles.card, shadow.card]}

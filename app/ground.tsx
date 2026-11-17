@@ -3,7 +3,7 @@ import * as Haptics from "expo-haptics";
 import { useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Animated, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { Card, Glass, PrimaryButton, ScreenHeader } from "../src/components/ui";
+import { Card, Glass, PracticeNote, PrimaryButton, ScreenHeader } from "../src/components/ui";
 import { useApp } from "../src/context/AppProvider";
 import { MICRO_ACTIONS, MICRO_ACTIONS_INSIDE } from "../src/data";
 import { imgSource, photos } from "../src/images";
@@ -71,18 +71,39 @@ export default function Ground() {
   const footScale = breath.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
   const subtitle =
     mode === "hold"
-      ? "Write it down and set it aside until you want it back."
+      ? "Set a looping thought aside until you want it back."
       : mode === "spark"
-        ? "One small action can brighten how you feel."
+        ? "One small action can shift a heavy mood."
         : mode === "anchor"
           ? "Gentle pressure helps you feel where your body is."
-          : "Name what you can see, touch, hear, smell, and taste.";
+          : "Use your senses when panic or overwhelm takes over.";
+  const note =
+    mode === "hold"
+      ? {
+          helps: "Helps looping thoughts that will not let go.",
+          how: "Write the thought down. You are not solving it now — only parking it somewhere safe.",
+        }
+      : mode === "spark"
+        ? {
+            helps: "Helps a stuck, flat, or heavy mood.",
+            how: "Pick one tiny action. Outside is a bonus, not a requirement.",
+          }
+        : mode === "anchor"
+          ? {
+              helps: "Helps when you feel unmoored, floaty, or far from your body.",
+              how: "Press, rest, or move slowly so your brain can feel a point of contact.",
+            }
+          : {
+              helps: "Helps panic, spiraling, and feeling unsafe in the moment.",
+              how: "Name what you can see, touch, hear, smell, and taste. Guessing is fine.",
+            };
 
   return (
     <View style={styles.screen}>
       <Image source={imgSource(photos.landWindow)} resizeMode="contain" style={styles.backdrop} />
       <View style={{ flex: 1 }}>
-        <ScreenHeader title="Grounding" subtitle={subtitle} />
+        <ScreenHeader title="LAND" subtitle={subtitle} />
+        <PracticeNote helps={note.helps} how={note.how} />
         <View style={styles.modes}>
           {MODES.map((m) => (
             <Pressable

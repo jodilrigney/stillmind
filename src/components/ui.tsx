@@ -148,6 +148,15 @@ export function PrimaryButton({
   );
 }
 
+export function PracticeNote({ helps, how }: { helps: string; how: string }) {
+  return (
+    <View style={styles.practiceNote}>
+      <Text style={styles.practiceHelps}>{helps}</Text>
+      <Text style={styles.practiceHow}>{how}</Text>
+    </View>
+  );
+}
+
 export function ScreenHeader({
   title,
   subtitle,
@@ -306,6 +315,18 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   sub: { fontFamily: fonts.body, color: colors.ink, fontSize: 14, lineHeight: 20, marginTop: 4 },
+  practiceNote: {
+    marginHorizontal: 18,
+    marginBottom: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(251,249,245,0.78)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.45)",
+  },
+  practiceHelps: { fontFamily: fonts.bodyMed, color: colors.ink, fontSize: 13, lineHeight: 18 },
+  practiceHow: { fontFamily: fonts.body, color: colors.ink, fontSize: 12, lineHeight: 17, marginTop: 3, opacity: 0.9 },
   dim: { flex: 1, backgroundColor: "rgba(61,57,51,0.28)", justifyContent: "flex-end" },
   sheet: {
     backgroundColor: colors.linen,

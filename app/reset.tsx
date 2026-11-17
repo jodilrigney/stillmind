@@ -17,7 +17,7 @@ import {
   stopFrequencyPad,
 } from "../src/audio";
 import { EftGuide } from "../src/components/EftGuide";
-import { PrimaryButton, ScreenHeader } from "../src/components/ui";
+import { PracticeNote, PrimaryButton, ScreenHeader } from "../src/components/ui";
 import { EFT_POINTS } from "../src/data";
 import { imgSource, photos } from "../src/images";
 import { useSessionAwake } from "../src/keepAwake";
@@ -83,9 +83,26 @@ const MODES: { id: Mode; label: string }[] = [
 ];
 
 function ResetChrome({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void }) {
+  const eft = mode === "eft";
   return (
     <>
-      <ScreenHeader title="STILL-MIND" subtitle="Tap one side, then the other. It helps the body settle." onBack={() => router.replace("/(tabs)")} />
+      <ScreenHeader
+        title="STILL-MIND"
+        subtitle={eft ? "EFT tapping" : "Left and right tapping"}
+        onBack={() => router.replace("/(tabs)")}
+      />
+      <PracticeNote
+        helps={
+          eft
+            ? "Helps with stress, upset, and tension that sits in the body."
+            : "Helps when you feel wired, overwhelmed, or cannot slow down."
+        }
+        how={
+          eft
+            ? "Tap the glowing point. Stay with the feeling. Use Next when you are ready."
+            : "Follow the glow. Tap the same spot on the left, then the right. Choose collarbone or outer arm."
+        }
+      />
       <View style={styles.modes}>
         {MODES.map((m) => (
           <Pressable
@@ -371,7 +388,7 @@ function Bilateral({ chrome }: { chrome: ReactNode }) {
         </View>
       </View>
       <LinearGradient colors={["rgba(251,249,245,0)", "rgba(251,249,245,0.55)", "rgba(251,249,245,0.88)"]} style={styles.hugDock}>
-        <Text style={styles.lead}>Tapping sequences to reduce stress</Text>
+        <Text style={styles.lead}>Tap along with the glow — left, then right.</Text>
         <View style={styles.poseRow}>
           {POSES.map((p) => (
             <Pressable
@@ -650,9 +667,11 @@ const styles = StyleSheet.create({
     minHeight: 0,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   figureBox: {
-    width: "100%",
+    height: "100%",
+    maxWidth: "100%",
     aspectRatio: 719 / 936,
     position: "relative",
   },
@@ -729,11 +748,11 @@ const styles = StyleSheet.create({
     fontSize: 36,
     color: colors.ink,
   },
-  modes: { paddingHorizontal: 18, gap: 8, marginBottom: 8 },
+  modes: { paddingHorizontal: 18, gap: 6, marginBottom: 6 },
   mode: {
-    backgroundColor: "rgba(251,249,245,0.86)",
+    backgroundColor: "rgba(251,249,245,0.9)",
     borderRadius: 999,
-    paddingVertical: 12,
+    paddingVertical: 9,
     alignItems: "center",
   },
   modeOn: { backgroundColor: colors.sageSoft },

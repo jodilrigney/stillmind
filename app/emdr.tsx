@@ -89,7 +89,7 @@ export default function SimpleEmdr() {
         </Pressable>
         <View style={styles.titleBlock}>
           <Text style={styles.title}>Simple EMDR</Text>
-          <Text style={styles.sub}>Follow the light from side to side.</Text>
+          <Text style={styles.sub}>Helps a busy mind with a simple side-to-side eye task. Keep your head still and follow the light.</Text>
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Slower" onPress={() => setSpeed((v) => Math.max(0.15, +(v - 0.1).toFixed(1)))} style={styles.nudge}>
           <Text style={styles.nudgeText}>-</Text>
@@ -99,7 +99,7 @@ export default function SimpleEmdr() {
           <Text style={styles.nudgeText}>+</Text>
         </Pressable>
       </View>
-      <Text style={styles.hint}>{paused ? "Tap the screen to continue." : "Tap the screen to pause."}</Text>
+      <Text style={styles.hint}>{paused ? "Tap the screen to continue." : "Tap the screen to pause. Stop if your eyes or head feel strained."}</Text>
     </View>
   );
 }

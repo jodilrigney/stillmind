@@ -14,7 +14,7 @@ import {
   stopTone,
   webNestedMp3Uri,
 } from "../src/audio";
-import { ScreenHeader } from "../src/components/ui";
+import { PracticeNote, ScreenHeader } from "../src/components/ui";
 import { imgSource, photos } from "../src/images";
 import { useSessionAwake } from "../src/keepAwake";
 import { useOscillate } from "../src/motion";
@@ -186,7 +186,11 @@ export default function Breathe() {
         style={[styles.backdrop, { transform: [{ scale: zoom }, { translateX: shift }] }]}
       />
       <LinearGradient colors={["rgba(231,238,242,0.22)", "rgba(244,240,230,0.38)", "rgba(244,240,230,0.82)"]} style={{ flex: 1 }}>
-        <ScreenHeader title="INHALE" subtitle="Follow the word in the circle. Breathe with the count underneath." />
+        <ScreenHeader title="INHALE" subtitle="A paced breath you can follow." />
+        <PracticeNote
+          helps="Helps with anxiety, tightness, and a breath that will not slow down."
+          how="Match the word in the circle. Inhale, hold, or exhale with the count. 4-4-4-4 steadies you. 4-7-8 is for winding down."
+        />
         <View style={styles.body}>
           <View style={styles.lift} />
           <View style={styles.center}>

@@ -1571,6 +1571,10 @@ let freqSound: Audio.Sound | null = null;
 let webFreq: HTMLAudioElement | null = null;
 let freqPlayingId: string | null = null;
 let freqSeq = 0;
+let freqVol = 0.28;
+let freqFadeSeq = 0;
+let freqFadeInterval: ReturnType<typeof setInterval> | null = null;
+let freqFadeRaf: number | null = null;
 
 function silenceFreqNow() {
   if (webFreq) {
@@ -1590,7 +1594,69 @@ function silenceFreqNow() {
   }
 }
 
+function cancelFreqFade() {
+  freqFadeSeq += 1;
+  if (freqFadeInterval != null) {
+    clearInterval(freqFadeInterval);
+    freqFadeInterval = null;
+  }
+  if (freqFadeRaf != null && typeof cancelAnimationFrame !== "undefined") {
+    cancelAnimationFrame(freqFadeRaf);
+    freqFadeRaf = null;
+  }
+}
+
+function applyFreqVol(vol: number) {
+  const next = Math.max(0, Math.min(1, vol));
+  freqVol = next;
+  if (webFreq) webFreq.volume = next;
+  if (freqSound) freqSound.setVolumeAsync(next).catch(() => {});
+}
+
+/** Ease the pad to silence, then stop it so the end of a session is not a hard cut. */
+export function fadeOutFrequencyPad(ms = 16000) {
+  const duration = Math.max(1200, ms);
+  const elVol = webFreq && Number.isFinite(webFreq.volume) ? webFreq.volume : freqVol;
+  const start = Math.max(0, elVol);
+  if (start <= 0.001 || (!webFreq && !freqSound)) {
+    void stopFrequencyPad();
+    return;
+  }
+  const seq = ++freqFadeSeq;
+  if (freqFadeInterval != null) {
+    clearInterval(freqFadeInterval);
+    freqFadeInterval = null;
+  }
+  if (freqFadeRaf != null && typeof cancelAnimationFrame !== "undefined") {
+    cancelAnimationFrame(freqFadeRaf);
+    freqFadeRaf = null;
+  }
+  const t0 = Date.now();
+  const tick = () => {
+    if (seq !== freqFadeSeq) return;
+    const p = Math.min(1, (Date.now() - t0) / duration);
+    applyFreqVol(start * 0.5 * (1 + Math.cos(Math.PI * p)));
+    if (p >= 1) {
+      freqFadeInterval = null;
+      freqFadeRaf = null;
+      freqSeq += 1;
+      freqPlayingId = null;
+      silenceFreqNow();
+      return;
+    }
+    if (Platform.OS === "web" && typeof requestAnimationFrame !== "undefined") {
+      freqFadeRaf = requestAnimationFrame(tick);
+    }
+  };
+  if (Platform.OS === "web" && typeof requestAnimationFrame !== "undefined") {
+    freqFadeRaf = requestAnimationFrame(tick);
+    return;
+  }
+  freqFadeInterval = setInterval(tick, 80);
+}
+
 export async function stopFrequencyPad() {
+  cancelFreqFade();
   freqSeq += 1;
   freqPlayingId = null;
   silenceFreqNow();
@@ -1607,6 +1673,7 @@ export async function playFrequencyPad(idOrHz: FrequencyClipId | number, volume 
     setFrequencyPadVolume(vol);
     return;
   }
+  cancelFreqFade();
   const seq = ++freqSeq;
   silenceFreqNow();
   freqPlayingId = clip.id;
@@ -1618,6 +1685,7 @@ export async function playFrequencyPad(idOrHz: FrequencyClipId | number, volume 
     el.loop = true;
     el.preload = "auto";
     el.volume = vol;
+    freqVol = vol;
     webFreq = el;
     const start = () => {
       if (seq !== freqSeq || webFreq !== el) {
@@ -1654,6 +1722,7 @@ export async function playFrequencyPad(idOrHz: FrequencyClipId | number, volume 
     return;
   }
   freqSound = sound;
+  freqVol = vol;
 }
 
 export function frequencyPadProgress() {
@@ -1692,15 +1761,14 @@ export async function seekFrequencyPad(ratio: number) {
 }
 
 export function setFrequencyPadVolume(volume: number) {
-  const vol = Math.max(0, Math.min(0.7, volume));
-  if (webFreq) webFreq.volume = vol;
-  if (freqSound) freqSound.setVolumeAsync(vol).catch(() => {});
+  cancelFreqFade();
+  applyFreqVol(Math.max(0, Math.min(0.7, volume)));
 }
 
-/** Zen beds that stay in Em/G so Tri-Calm bowls remain consonant all the way through. */
+/** Zen beds in Em/G so Tri-Calm bowls stay consonant. Ember is a steady drone, no chorus waver. */
 export const RHYTHM_BEDS = [
   { id: "still", title: "Still", source: require("../assets/audio/calm.mp3") },
-  { id: "ember", title: "Ember", source: require("../assets/audio/zen-ember.wav") },
+  { id: "ember", title: "Ember", source: require("../assets/audio/ember-drone.wav") },
 ] as const;
 
 export type RhythmBedId = (typeof RHYTHM_BEDS)[number]["id"];

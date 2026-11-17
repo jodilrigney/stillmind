@@ -41,7 +41,17 @@ type Burst = { id: number; x: number; y: number };
 type Thumb = { id: number; x: number; y: number };
 
 const TRI_PHOTOS = libraryFor("tri-calm");
+const MUSIC_VOL_MIN = 0.05;
+const MUSIC_VOL_MAX = 0.55;
 const RHYTHM_VOL = 0.2;
+const RHYTHM_MIN = 0.92;
+const RHYTHM_MAX = 1.08;
+const HAPTIC_MIN = 0.1;
+const HAPTIC_MAX = 1;
+
+function fillPct(value: number, min: number, max: number) {
+  return `${Math.round(((value - min) / (max - min)) * 100)}%`;
+}
 
 function rhythmWord(rate: number) {
   if (rate < 0.97) return "Slow";
@@ -69,16 +79,16 @@ export default function TriCalm() {
       };
     }, [])
   );
-  const [on, setOn] = useState(true);
   const [hapticOn, setHapticOn] = useState(true);
   const [hapticVol, setHapticVol] = useState(0.55);
   const [musicOn, setMusicOn] = useState(true);
   const [musicVol, setMusicVol] = useState(RHYTHM_VOL);
   const [rhythm, setRhythm] = useState(1);
-  const [bedId, setBedId] = useState<RhythmBedId>("ember");
+  const [bedId, setBedId] = useState<RhythmBedId>("still");
   const [voicing, setVoicing] = useState<HarmonyVoicing>("dyad");
   const [photoId, setPhotoId] = useState(TRI_PHOTOS[0]?.id ?? "dock-mist");
   const [screenOn, setScreenOn] = useState(false);
+  const [guide, setGuide] = useState<null | "scene" | "buttons">(null);
   const photo = libraryPhoto(photoId);
   const bed = RHYTHM_BEDS.find((b) => b.id === bedId) ?? RHYTHM_BEDS[0];
   const feel = { on: hapticOn, volume: hapticVol };
@@ -97,11 +107,7 @@ export default function TriCalm() {
   );
 
   useEffect(() => {
-    if (!on) releaseAllHarmony();
-  }, [on]);
-
-  useEffect(() => {
-    if (!screenOn || !on || !musicOn || musicVol <= 0.01) {
+    if (!screenOn || !musicOn || musicVol <= 0.01) {
       stopRhythmBed().catch(() => {});
       return;
     }
@@ -115,26 +121,25 @@ export default function TriCalm() {
       alive = false;
       stopRhythmBed().catch(() => {});
     };
-  }, [screenOn, on, musicOn, bedId]);
+  }, [screenOn, musicOn, bedId]);
 
   useEffect(() => {
-    if (!musicOn || !on) return;
+    if (!musicOn) return;
     setRhythmRate(rhythm).catch(() => {});
-  }, [rhythm, musicOn, on]);
+  }, [rhythm, musicOn]);
 
   useEffect(() => {
-    if (!musicOn || !on) return;
+    if (!musicOn) return;
     setRhythmVolume(musicVol);
-  }, [musicVol, musicOn, on]);
+  }, [musicVol, musicOn]);
 
   const onPressSide = useCallback(
     (side: "L" | "R") => {
-      if (!on) return;
       setTimeout(() => {
         holdHarmony(side).catch(() => {});
       }, 0);
     },
-    [on, hapticOn, hapticVol]
+    [hapticOn, hapticVol]
   );
 
   const onReleaseSide = useCallback((side: "L" | "R") => {
@@ -167,7 +172,7 @@ export default function TriCalm() {
     <View style={styles.root}>
       <View style={styles.waterPane}>
         <Pool
-          running={on}
+          running
           photo={photo.source}
           hapticOn={hapticOn}
           hapticVol={hapticVol}
@@ -185,11 +190,15 @@ export default function TriCalm() {
             <Ionicons name="chevron-back" size={20} color={colors.ink} />
           </Pressable>
           <View style={styles.titlePill}>
-            <Text style={styles.topNotes}>
-              {voicing === "single" ? "E · G bowls" : `${HARMONY_NOTES.L} · ${HARMONY_NOTES.R} bowls`}
-            </Text>
-            <Text style={styles.topTitle}>Touch the water anywhere</Text>
-            <Text style={styles.topHint}>Hold to let both sides of the body settle.</Text>
+            <Text style={styles.topNotes}>Tri-Calm</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="How to use Tri-Calm"
+              onPress={() => setGuide("scene")}
+              style={styles.helpBtn}
+            >
+              <Ionicons name="help-outline" size={18} color={colors.ink} />
+            </Pressable>
           </View>
           <Pressable
             accessibilityRole="button"
@@ -199,25 +208,48 @@ export default function TriCalm() {
           >
             <Ionicons name="images-outline" size={16} color={colors.ink} />
           </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={on ? "Pause" : "Begin"}
-            onPress={() => setOn((v) => !v)}
-            style={[styles.feelBtn, !on && styles.feelBtnOn]}
-          >
-            <Ionicons name={on ? "pause" : "play"} size={14} color={on ? colors.linen : colors.sageDeep} />
-            <Text style={[styles.feelText, !on && styles.feelTextOn]}>{on ? "Pause" : "Begin"}</Text>
-          </Pressable>
         </View>
+        {guide ? (
+          <View style={[styles.guideOverlay, guide === "buttons" && styles.guideOverlayLow]}>
+            <View style={styles.guideCard}>
+              {guide === "scene" ? (
+                <>
+                  <Text style={styles.guideCardTitle}>How to use Tri-Calm</Text>
+                  <Text style={styles.guideCardBody}>Helps when you feel split, overstimulated, or pulled in two directions.</Text>
+                  <Text style={styles.guideCardBody}>Tap or hold your finger or thumb on the left and right of the water.</Text>
+                  <Text style={styles.guideCardBody}>Let go whenever you want rest.</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.guideCardTitle}>The buttons</Text>
+                  <Text style={styles.guideCardBody}>Music turns the music on or off. Tap Still or Ember to choose your background music.</Text>
+                  <Text style={styles.guideCardBody}>Vol adjusts how loud the music is. + is louder, − is quieter.</Text>
+                  <Text style={styles.guideCardBody}>Rhythm speeds up or slows down the music. The word beside the slider — Slow, Gentle, or Flowing — is the pace right now. Gentle is the natural pace.</Text>
+                  <Text style={styles.guideCardBody}>Dyad sings two bowl notes, one on each side of the water. Single is one note.</Text>
+                  <Text style={styles.guideCardBody}>Haptics turns vibration on or off when you hold the water. Feel is how strongly you feel that vibration.</Text>
+                  <Text style={styles.guideCardBody}>The photo button at the top changes the scene.</Text>
+                </>
+              )}
+              <Pressable accessibilityRole="button" onPress={() => setGuide(null)} style={styles.guideDone}>
+                <Text style={styles.guideDoneText}>Got it</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
       </View>
       <View style={styles.controlPane} pointerEvents="box-none">
         <LinearGradient
-          colors={["rgba(232,238,236,0.55)", "rgba(244,240,230,0.92)"]}
+          colors={["rgba(232,238,236,0.18)", "rgba(244,240,230,0.42)"]}
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
         <View style={styles.bottomBar} pointerEvents="box-none">
-          <View style={styles.controlRow}>
+          <Text style={styles.hint} pointerEvents="none">
+            {`${photo.title} · hold to ripple, feel, and sing`}
+          </Text>
+          <View style={styles.controlsBlock}>
+            <View style={styles.controlRows}>
+              <View style={styles.controlRow}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={musicOn ? "Mute background music" : "Play background music"}
@@ -231,7 +263,7 @@ export default function TriCalm() {
               <>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`Music bed ${bed.title}. Tap to change.`}
+                  accessibilityLabel={`Music ${bed.title}. Tap to change.`}
                   onPress={nextBed}
                   style={[styles.hapticChip, styles.hapticChipOn]}
                 >
@@ -240,33 +272,33 @@ export default function TriCalm() {
                 </Pressable>
                 <View style={styles.volRow}>
                   <Text style={styles.volLab}>Vol</Text>
-                  <Pressable onPress={() => setMusicVol((v) => Math.max(0.05, +(v - 0.05).toFixed(2)))} style={styles.nudge}>
+                  <Pressable onPress={() => setMusicVol((v) => Math.max(MUSIC_VOL_MIN, +(v - 0.05).toFixed(2)))} style={styles.nudge}>
                     <Text>-</Text>
                   </Pressable>
                   <View style={styles.volTrack}>
-                    <View style={[styles.volFill, { width: `${Math.round(musicVol * 100)}%` }]} />
+                    <View style={[styles.volFill, { width: fillPct(musicVol, MUSIC_VOL_MIN, MUSIC_VOL_MAX) }]} />
                   </View>
-                  <Pressable onPress={() => setMusicVol((v) => Math.min(0.55, +(v + 0.05).toFixed(2)))} style={styles.nudge}>
+                  <Pressable onPress={() => setMusicVol((v) => Math.min(MUSIC_VOL_MAX, +(v + 0.05).toFixed(2)))} style={styles.nudge}>
                     <Text>+</Text>
                   </Pressable>
                 </View>
                 <View style={styles.volRow}>
                   <Text style={styles.volLab}>Rhythm</Text>
-                  <Pressable onPress={() => setRhythm((v) => Math.max(0.92, +(v - 0.04).toFixed(2)))} style={styles.nudge}>
+                  <Pressable onPress={() => setRhythm((v) => Math.max(RHYTHM_MIN, +(v - 0.04).toFixed(2)))} style={styles.nudge}>
                     <Text>-</Text>
                   </Pressable>
                   <View style={styles.volTrack}>
-                    <View style={[styles.volFill, { width: `${Math.round(((rhythm - 0.92) / 0.16) * 100)}%` }]} />
+                    <View style={[styles.volFill, { width: fillPct(rhythm, RHYTHM_MIN, RHYTHM_MAX) }]} />
                   </View>
-                  <Pressable onPress={() => setRhythm((v) => Math.min(1.08, +(v + 0.04).toFixed(2)))} style={styles.nudge}>
+                  <Pressable onPress={() => setRhythm((v) => Math.min(RHYTHM_MAX, +(v + 0.04).toFixed(2)))} style={styles.nudge}>
                     <Text>+</Text>
                   </Pressable>
                   <Text style={styles.rhythmWord}>{rhythmWord(rhythm)}</Text>
                 </View>
               </>
             ) : null}
-          </View>
-          <View style={styles.controlRow}>
+              </View>
+              <View style={styles.controlRow}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={voicing === "dyad" ? "Bowl dyad on. Tap for single pitch." : "Single pitch on. Tap for dyad."}
@@ -288,22 +320,27 @@ export default function TriCalm() {
             {hapticOn ? (
               <View style={styles.volRow}>
                 <Text style={styles.volLab}>Feel</Text>
-                <Pressable onPress={() => setHapticVol((v) => Math.max(0.1, +(v - 0.1).toFixed(1)))} style={styles.nudge}>
-                  <Text>-</Text>
-                </Pressable>
-                <View style={styles.volTrack}>
-                  <View style={[styles.volFill, { width: `${Math.round(hapticVol * 100)}%` }]} />
-                </View>
-                <Pressable onPress={() => setHapticVol((v) => Math.min(1, +(v + 0.1).toFixed(1)))} style={styles.nudge}>
-                  <Text>+</Text>
-                </Pressable>
+                <Pressable onPress={() => setHapticVol((v) => Math.max(HAPTIC_MIN, +(v - 0.1).toFixed(1)))} style={styles.nudge}>
+                    <Text>-</Text>
+                  </Pressable>
+                  <View style={styles.volTrack}>
+                    <View style={[styles.volFill, { width: fillPct(hapticVol, HAPTIC_MIN, HAPTIC_MAX) }]} />
+                  </View>
+                  <Pressable onPress={() => setHapticVol((v) => Math.min(HAPTIC_MAX, +(v + 0.1).toFixed(1)))} style={styles.nudge}>
+                    <Text>+</Text>
+                  </Pressable>
               </View>
             ) : null}
-          </View>
-          <View style={styles.hintPill} pointerEvents="none">
-            <Text style={styles.hint}>
-              {on ? `${photo.title} · hold to ripple, feel, and sing` : "Paused"}
-            </Text>
+              </View>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="What the buttons do"
+              onPress={() => setGuide("buttons")}
+              style={styles.bottomHelpBtn}
+            >
+              <Ionicons name="help-outline" size={18} color={colors.ink} />
+            </Pressable>
           </View>
         </View>
       </View>
@@ -523,12 +560,12 @@ function Ring({ x, y, delay, onDone }: { x: number; y: number; delay: number; on
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#8A9AA8", overflow: "hidden" },
-  waterPane: { flex: 2, overflow: "hidden", position: "relative" },
+  waterPane: { flex: 1, overflow: "hidden", position: "relative" },
   controlPane: {
-    flex: 1,
+    flexGrow: 0,
+    flexShrink: 0,
     overflow: "hidden",
     position: "relative",
-    justifyContent: "center",
   },
   pool: {
     ...StyleSheet.absoluteFillObject,
@@ -578,28 +615,74 @@ const styles = StyleSheet.create({
   },
   titlePill: {
     flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
     backgroundColor: "rgba(251,249,245,0.82)",
     borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingLeft: 14,
+    paddingRight: 4,
+    paddingVertical: 4,
   },
   topNotes: {
     fontFamily: fonts.titleBold,
     color: colors.sageDeep,
     fontSize: 15,
   },
-  topTitle: {
-    fontFamily: fonts.body,
-    color: colors.ink,
-    fontSize: 13,
+  helpBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  topHint: {
-    fontFamily: fonts.body,
-    color: colors.ink,
-    fontSize: 12,
-    lineHeight: 16,
-    marginTop: 2,
+  guideOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 20,
+    backgroundColor: "rgba(61,57,51,0.38)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
   },
+  guideOverlayLow: {
+    justifyContent: "flex-end",
+    paddingBottom: 16,
+    backgroundColor: "rgba(61,57,51,0.22)",
+  },
+  controlsBlock: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    width: "100%",
+  },
+  controlRows: {
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 1,
+  },
+  bottomHelpBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "rgba(251,249,245,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  guideCard: {
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: 22,
+    padding: 20,
+    backgroundColor: "rgba(251,249,245,0.94)",
+    gap: 8,
+  },
+  guideCardTitle: { fontFamily: fonts.titleBold, color: colors.ink, fontSize: 22, marginBottom: 4 },
+  guideCardBody: { fontFamily: fonts.body, color: colors.ink, fontSize: 15, lineHeight: 22 },
+  guideDone: { marginTop: 10, borderRadius: 999, backgroundColor: colors.sage, paddingVertical: 12, alignItems: "center" },
+  guideDoneText: { fontFamily: fonts.bodyBold, color: colors.linen, fontSize: 15 },
   photoBtn: {
     width: 34,
     height: 34,
@@ -608,66 +691,51 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  feelBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: colors.sage,
-    borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    flexShrink: 0,
-  },
-  feelBtnOn: { backgroundColor: colors.sageSoft },
-  feelText: { fontFamily: fonts.bodyMed, color: colors.linen, fontSize: 13 },
-  feelTextOn: { color: colors.sageDeep },
   bottomBar: {
     alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
+    justifyContent: "flex-start",
+    gap: 6,
     zIndex: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 8,
+    paddingTop: 4,
+    paddingBottom: 8,
   },
   controlRow: {
     flexDirection: "row",
     alignItems: "center",
     flexWrap: "wrap",
     justifyContent: "center",
-    gap: 10,
-    backgroundColor: "rgba(251,249,245,0.82)",
-    borderRadius: 22,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    gap: 6,
+    backgroundColor: "transparent",
+    paddingVertical: 0,
+    paddingHorizontal: 4,
   },
-  rhythmWord: { fontFamily: fonts.body, color: colors.muted, fontSize: 12, minWidth: 52 },
+  rhythmWord: { fontFamily: fonts.body, color: colors.muted, fontSize: 11, minWidth: 44 },
   hapticChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 4,
     backgroundColor: colors.sageSoft,
     borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
   },
   hapticChipOn: { backgroundColor: colors.sage },
-  hapticText: { fontFamily: fonts.bodyMed, color: colors.sageDeep, fontSize: 13 },
+  hapticText: { fontFamily: fonts.bodyMed, color: colors.sageDeep, fontSize: 12 },
   hapticTextOn: { color: colors.linen },
-  volRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  volLab: { fontFamily: fonts.bodyMed, color: colors.ink, fontSize: 13 },
-  volTrack: { width: 78, height: 8, borderRadius: 4, backgroundColor: colors.creamDeep, overflow: "hidden" },
-  volFill: { height: 8, backgroundColor: colors.sage },
-  nudge: { width: 24, height: 24, borderRadius: 12, backgroundColor: colors.creamDeep, alignItems: "center", justifyContent: "center" },
-  hintPill: {
-    backgroundColor: "rgba(251,249,245,0.82)",
-    borderRadius: 999,
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-  },
+  volRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  volLab: { fontFamily: fonts.bodyMed, color: colors.ink, fontSize: 12 },
+  volTrack: { width: 42, height: 6, borderRadius: 3, backgroundColor: "rgba(237,230,216,0.7)", overflow: "hidden" },
+  volFill: { height: 6, backgroundColor: colors.sage },
+  nudge: { width: 22, height: 22, borderRadius: 11, backgroundColor: "rgba(237,230,216,0.7)", alignItems: "center", justifyContent: "center" },
   hint: {
-    fontFamily: fonts.body,
+    fontFamily: fonts.bodyMed,
     color: colors.ink,
-    fontSize: 13,
+    fontSize: 15,
+    lineHeight: 20,
+    textAlign: "center",
+    marginBottom: 4,
+    paddingHorizontal: 12,
   },
   ring: {
     position: "absolute",

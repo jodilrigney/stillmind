@@ -3,7 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, ImageBackground, Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { playFrequencyPad, setFrequencyPadVolume, stopFrequencyPad, stopTone } from "../../src/audio";
+import { fadeOutFrequencyPad, playFrequencyPad, setFrequencyPadVolume, stopFrequencyPad, stopTone } from "../../src/audio";
 import { ScreenHeader } from "../../src/components/ui";
 import { MEDITATIONS } from "../../src/data";
 import { ImageKey, imgSource, images } from "../../src/images";
@@ -11,7 +11,8 @@ import { useSessionAwake } from "../../src/keepAwake";
 import { setSpeakVolume, speakMeditationClip, stopSpeak } from "../../src/speak";
 import { colors, fonts } from "../../src/theme";
 
-const OPEN_VOL = 0.46;
+const OPEN_VOL = 0.48;
+const MUSIC_END_FADE_SEC = 16;
 
 export default function MeditationSession() {
   useSessionAwake();
@@ -19,20 +20,21 @@ export default function MeditationSession() {
   const sessionId = Array.isArray(id) ? id[0] : id;
   const m = MEDITATIONS.find((x) => x.id === sessionId) || MEDITATIONS[0];
   const total = m.minutes * 60;
-  const [line, setLine] = useState(0);
   const [left, setLeft] = useState(total);
   const [musicOn, setMusicOn] = useState(true);
   const [voiceOn, setVoiceOn] = useState(true);
+  const [musicPick, setMusicPick] = useState(m.musicId);
   const running = left > 0;
   const [volume, setVolume] = useState(OPEN_VOL);
-  const [voiceVol, setVoiceVol] = useState(0.55);
+  const [voiceVol, setVoiceVol] = useState(OPEN_VOL);
+  const [dragging, setDragging] = useState(false);
   const ken = useRef(new Animated.Value(1)).current;
   const seeking = useRef(false);
-  const lineRef = useRef(0);
-  lineRef.current = line;
+  const endFade = useRef(false);
+  const elapsed = Math.max(0, total - left);
+  const line = Math.min(m.lines.length, Math.floor(elapsed / m.lineSeconds));
   const resting = line >= m.lines.length;
   const shown = resting ? m.rest : m.lines[line];
-  const elapsed = Math.max(0, total - left);
   const progress = total > 0 ? elapsed / total : 0;
 
   useEffect(() => {
@@ -47,23 +49,24 @@ export default function MeditationSession() {
   }, [ken]);
 
   useEffect(() => {
-    setLine(0);
+    endFade.current = false;
     setLeft(m.minutes * 60);
-  }, [m.id, m.minutes]);
+    setMusicPick(m.musicId);
+    setVolume(OPEN_VOL);
+    setVoiceVol(OPEN_VOL);
+  }, [m.id, m.minutes, m.musicId]);
 
   useFocusEffect(
     useCallback(() => {
-      if (musicOn) playFrequencyPad(m.musicId, volume).catch(() => {});
-      const i = lineRef.current;
-      if (voiceOn && i < m.lines.length) speakMeditationClip(`${m.id}-${i}`, voiceVol).catch(() => {});
+      if (musicOn) playFrequencyPad(musicPick, OPEN_VOL).catch(() => {});
       return () => {
         stopTone();
         stopFrequencyPad();
         stopSpeak();
       };
-      // Start music + first voice line on open; toggles handle later changes.
+      // Start music on open at mid volume; the voice effect speaks the current line.
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [m.musicId, m.id])
+    }, [m.id])
   );
 
   useEffect(() => {
@@ -71,31 +74,55 @@ export default function MeditationSession() {
       stopFrequencyPad();
       return;
     }
-    playFrequencyPad(m.musicId, volume).catch(() => {});
-  }, [musicOn, m.musicId]);
+    playFrequencyPad(musicPick, volume).catch(() => {});
+  }, [musicOn, musicPick]);
 
   useEffect(() => {
     if (!running) {
       stopSpeak();
       return;
     }
-    const t = setInterval(() => setLine((l) => (l < m.lines.length ? l + 1 : l)), m.lineSeconds * 1000);
     const c = setInterval(() => {
       if (seeking.current) return;
       setLeft((n) => Math.max(0, n - 1));
     }, 1000);
-    return () => {
-      clearInterval(t);
-      clearInterval(c);
-    };
-  }, [running, m.lines.length, m.lineSeconds]);
+    return () => clearInterval(c);
+  }, [running]);
 
   useEffect(() => {
-    setFrequencyPadVolume(volume);
     setSpeakVolume(voiceVol);
-  }, [volume, voiceVol]);
+  }, [voiceVol]);
 
   useEffect(() => {
+    endFade.current = false;
+    setFrequencyPadVolume(volume);
+  }, [volume]);
+
+  useEffect(() => {
+    if (!musicOn) {
+      endFade.current = false;
+      return;
+    }
+    if (dragging) return;
+    if (left > MUSIC_END_FADE_SEC) {
+      if (endFade.current) {
+        endFade.current = false;
+        playFrequencyPad(musicPick, volume).catch(() => {});
+      }
+      return;
+    }
+    if (endFade.current) return;
+    endFade.current = true;
+    fadeOutFrequencyPad(Math.max(left, MUSIC_END_FADE_SEC) * 1000);
+    // volume is the level to restore if the user scrubs back from the end.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [left, musicOn, dragging, musicPick]);
+
+  useEffect(() => {
+    if (dragging) {
+      stopSpeak();
+      return;
+    }
     if (!running || !voiceOn || resting) {
       stopSpeak();
       return;
@@ -103,12 +130,17 @@ export default function MeditationSession() {
     speakMeditationClip(`${m.id}-${line}`, voiceVol).catch(() => {});
     // voiceVol is applied live via setSpeakVolume; don't restart the clip on volume nudges.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [line, running, voiceOn, m.id, resting]);
+  }, [line, running, voiceOn, m.id, resting, dragging]);
 
   const seekTo = (nextProgress: number) => {
     const nextElapsed = Math.max(0, Math.min(total, nextProgress * total));
     setLeft(Math.round(total - nextElapsed));
-    setLine(Math.min(m.lines.length, Math.floor(nextElapsed / m.lineSeconds)));
+  };
+
+  const startMusic = (id: typeof musicPick, vol = volume) => {
+    setMusicPick(id);
+    setMusicOn(true);
+    playFrequencyPad(id, vol).catch(() => {});
   };
 
   const mm = clock(left);
@@ -142,8 +174,29 @@ export default function MeditationSession() {
             onChange={seekTo}
             onDragChange={(drag) => {
               seeking.current = drag;
+              setDragging(drag);
             }}
           />
+          {m.musicChoices?.length ? (
+            <View style={styles.musicPickRow}>
+              {m.musicChoices.map((choice) => {
+                const on = musicOn && musicPick === choice.id;
+                return (
+                  <Pressable
+                    key={choice.id}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: on }}
+                    accessibilityLabel={`${choice.label} sleep music, ${choice.note}`}
+                    onPress={() => startMusic(choice.id)}
+                    style={[styles.musicChip, on && styles.musicChipOn]}
+                  >
+                    <Text style={[styles.musicChipLabel, on && styles.musicChipLabelOn]}>{choice.label}</Text>
+                    <Text style={styles.musicChipNote}>{choice.note}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
           <View style={styles.toggleRow}>
             <Pressable
               accessibilityRole="button"
@@ -155,8 +208,7 @@ export default function MeditationSession() {
                   stopFrequencyPad();
                   return;
                 }
-                setMusicOn(true);
-                playFrequencyPad(m.musicId, volume).catch(() => {});
+                startMusic(musicPick);
               }}
             >
               <View style={styles.iconWrap}>
@@ -259,11 +311,15 @@ function SeekSlider({
             e.currentTarget.setPointerCapture?.(e.nativeEvent.pointerId);
             setFromX(e.nativeEvent.offsetX);
           },
-          onPointerMove: (e: { buttons?: number; nativeEvent: { offsetX: number } }) => {
-            if (!dragging.current && e.buttons !== 1) return;
+          onPointerMove: (e: { nativeEvent: { offsetX: number } }) => {
+            if (!dragging.current) return;
             setFromX(e.nativeEvent.offsetX);
           },
           onPointerUp: () => {
+            dragging.current = false;
+            onDragChange(false);
+          },
+          onPointerCancel: () => {
             dragging.current = false;
             onDragChange(false);
           },
@@ -326,6 +382,18 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   toggleRow: { flexDirection: "row", gap: 8 },
+  musicPickRow: { flexDirection: "row", gap: 8 },
+  musicChip: {
+    flex: 1,
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "rgba(237,230,216,0.72)",
+  },
+  musicChipOn: { backgroundColor: "rgba(215, 226, 204, 0.78)" },
+  musicChipLabel: { fontFamily: fonts.titleBold, color: colors.muted, fontSize: 14 },
+  musicChipLabelOn: { color: colors.sageDeep },
+  musicChipNote: { fontFamily: fonts.body, color: colors.ink, fontSize: 11, marginTop: 2, opacity: 0.75 },
   seekRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   seekTime: { fontFamily: fonts.bodyMed, color: colors.ink, fontSize: 12, width: 36, fontVariant: ["tabular-nums"] },
   seekHit: { flex: 1, height: 28, justifyContent: "center", position: "relative" },

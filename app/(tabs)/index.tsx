@@ -42,11 +42,11 @@ async function shareTextFile(filename: string, text: string) {
 }
 
 const TOOLS = [
-  { href: "/reset", letter: "S", word: "Still-mind", line: "Come back to still.", color: "rgba(245,236,220,0.92)" },
-  { href: "/tri-calm", letter: "T", word: "Tri-Calm", line: "Balance body, mind and senses.", color: "rgba(244,224,212,0.86)" },
-  { href: "/breathe", letter: "I", word: "Inhale", line: "Slow things down with the tide.", color: "rgba(201,217,227,0.86)" },
-  { href: "/follow", letter: "L", word: "Lighten", line: "Give my attention to the stream.", color: "rgba(215,226,204,0.86)" },
-  { href: "/ground", letter: "L", word: "Land", line: "Come back to your body.", color: "rgba(231,215,195,0.86)" },
+  { href: "/reset", letter: "S", word: "Still-mind", line: "Tapping to settle a wired body and mind.", color: "rgba(245,236,220,0.92)" },
+  { href: "/tri-calm", letter: "T", word: "Tri-Calm", line: "Hold both sides when you feel split.", color: "rgba(244,224,212,0.86)" },
+  { href: "/breathe", letter: "I", word: "Inhale", line: "Slow the breath when you feel tight or anxious.", color: "rgba(201,217,227,0.86)" },
+  { href: "/follow", letter: "L", word: "Lighten", line: "Track a light to unhook a looping mind.", color: "rgba(215,226,204,0.86)" },
+  { href: "/ground", letter: "L", word: "Land", line: "Use your senses when you feel far from your body.", color: "rgba(231,215,195,0.86)" },
 ];
 
 export default function CalmKit() {

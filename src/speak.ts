@@ -65,9 +65,10 @@ const MEDITATION_CLIPS: Record<string, number> = {
 
 let voiceSound: Audio.Sound | null = null;
 let webVoice: { pause: () => void; play?: () => Promise<void>; removeAttribute: (name: string) => void; volume: number } | null = null;
+const webVoiceEls: { pause: () => void; removeAttribute: (name: string) => void; load?: () => void }[] = [];
 let speakVol = 0.78;
 let voiceClipId: string | null = null;
-let voiceStartingId: string | null = null;
+let voiceSeq = 0;
 
 function clampVol(v: number) {
   return Math.max(0, Math.min(1, v));
@@ -92,25 +93,39 @@ function pickVoice(voices: SpeechSynthesisVoice[]) {
   return [...voices].sort((a, b) => rank(a) - rank(b))[0];
 }
 
-export async function stopSpeak() {
-  voiceClipId = null;
+function silenceVoicesNow() {
   if (typeof window !== "undefined" && window.speechSynthesis) {
     window.speechSynthesis.cancel();
   }
   if (webVoice) {
     const el = webVoice;
     webVoice = null;
-    el.pause();
-    el.removeAttribute("src");
+    try {
+      el.pause();
+      el.removeAttribute("src");
+    } catch {}
+  }
+  while (webVoiceEls.length) {
+    const el = webVoiceEls.pop();
+    if (!el) continue;
+    try {
+      el.pause();
+      el.removeAttribute("src");
+      el.load?.();
+    } catch {}
   }
   if (voiceSound) {
     const s = voiceSound;
     voiceSound = null;
-    try {
-      await s.stopAsync();
-      await s.unloadAsync();
-    } catch {}
+    s.stopAsync().catch(() => {});
+    s.unloadAsync().catch(() => {});
   }
+}
+
+export async function stopSpeak() {
+  voiceSeq += 1;
+  voiceClipId = null;
+  silenceVoicesNow();
 }
 
 function speakWebFallback(text: string, volume: number) {
@@ -167,27 +182,19 @@ export async function speakSoothing(text: string, pointId?: string, volume = spe
 export async function speakMeditationClip(clipId: string, volume = speakVol) {
   const vol = clampVol(volume);
   speakVol = vol;
+  const seq = ++voiceSeq;
+  silenceVoicesNow();
   if (vol <= 0.01) {
-    voiceStartingId = null;
-    await stopSpeak();
-    return;
-  }
-  if (voiceClipId === clipId && (webVoice || voiceSound)) {
-    if (webVoice) webVoice.volume = vol;
-    webVoice?.play?.().catch(() => {});
-    if (voiceSound) voiceSound.setVolumeAsync(vol).catch(() => {});
-    return;
-  }
-  if (voiceStartingId === clipId) return;
-  voiceStartingId = clipId;
-  await stopSpeak();
-  voiceClipId = clipId;
-  const clip = MEDITATION_CLIPS[clipId];
-  if (!clip) {
-    voiceStartingId = null;
     voiceClipId = null;
     return;
   }
+  voiceClipId = clipId;
+  const clip = MEDITATION_CLIPS[clipId];
+  if (!clip) {
+    if (seq === voiceSeq) voiceClipId = null;
+    return;
+  }
+  if (seq !== voiceSeq) return;
 
   if (Platform.OS === "web" && typeof window !== "undefined") {
     const uri = webNestedMp3Uri(`audio/meditate/${clipId}.mp3`, clip);
@@ -195,13 +202,21 @@ export async function speakMeditationClip(clipId: string, volume = speakVol) {
     el.preload = "auto";
     el.volume = vol;
     webVoice = el;
-    const tryPlay = () => el.play().catch(() => {});
+    webVoiceEls.push(el);
+    const tryPlay = () => {
+      if (seq !== voiceSeq || webVoice !== el) {
+        try {
+          el.pause();
+        } catch {}
+        return;
+      }
+      el.play().catch(() => {});
+    };
     el.addEventListener("canplay", tryPlay, { once: true });
     el.addEventListener("ended", () => {
       if (webVoice === el) webVoice = null;
     });
     tryPlay();
-    voiceStartingId = null;
     return;
   }
 
@@ -211,7 +226,13 @@ export async function speakMeditationClip(clipId: string, volume = speakVol) {
       playsInSilentModeIOS: true,
       staysActiveInBackground: false,
     });
+    if (seq !== voiceSeq) return;
     const { sound } = await Audio.Sound.createAsync(clip, { volume: vol, shouldPlay: true });
+    if (seq !== voiceSeq) {
+      sound.stopAsync().catch(() => {});
+      sound.unloadAsync().catch(() => {});
+      return;
+    }
     voiceSound = sound;
     sound.setOnPlaybackStatusUpdate((st) => {
       if (st.isLoaded && st.didJustFinish) {
@@ -220,5 +241,4 @@ export async function speakMeditationClip(clipId: string, volume = speakVol) {
       }
     });
   } catch {}
-  voiceStartingId = null;
 }

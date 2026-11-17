@@ -444,12 +444,15 @@ export const FOODS: BrainHealthItem[] = [
   },
 ];
 
+export type MeditationMusicId = "174" | "396" | "528" | "639" | "741" | "852" | "calming-zen";
+
 export type Meditation = {
   id: string;
   title: string;
   minutes: number;
   imageKey: string;
-  musicId: "174" | "396" | "528" | "639" | "741" | "852" | "calming-zen";
+  musicId: MeditationMusicId;
+  musicChoices?: { id: MeditationMusicId; label: string; note: string }[];
   theme: string;
   lineSeconds: number;
   lines: string[];
@@ -498,21 +501,25 @@ export const MEDITATIONS: Meditation[] = [
   {
     id: "sleep",
     title: "Sleep support",
-    minutes: 8,
+    minutes: 10,
     imageKey: "alpineLake",
     musicId: "calming-zen",
-    theme: "Soft music · letting go",
-    lineSeconds: 32,
-    lines: [
-      "Dim the inner lights. Nothing has to be finished.",
-      "Lengthen the exhale like a tide going out.",
-      "If a thought arrives, set it on the shore.",
-      "Let the body become a little heavier in the bed or chair.",
-      "You do not have to fall asleep for rest to count.",
-      "If the mind wanders, return to the next slow breath.",
-      "Let sleep be optional. Rest is the practice.",
+    musicChoices: [
+      { id: "calming-zen", label: "Calm", note: "Soft zen" },
+      { id: "174", label: "Night", note: "Deep and steady" },
     ],
-    rest: "Remain in the dark quiet. Sleep is optional. Rest is enough.",
+    theme: "Slow breath · heavy body",
+    lineSeconds: 36,
+    lines: [
+      "Lie still. Let the bed hold you. You do not have to fall asleep.",
+      "Breathe in slowly through your nose. Then breathe out a little longer than you breathed in.",
+      "Once more. A gentle breath in. Then a slower breath out.",
+      "Let your forehead, eyes, and jaw go soft.",
+      "Let your shoulders drop. Let your arms and hands get heavy.",
+      "Feel your back and belly rest. Let your legs and feet sink into the bed.",
+      "If a thought comes, notice it, then come back to the slow breath out. Rest still counts.",
+    ],
+    rest: "Let the music keep playing. Sleep can come in its own time. Rest is enough.",
   },
   {
     id: "stress",
