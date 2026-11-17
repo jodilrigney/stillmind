@@ -49,12 +49,14 @@ export function NatureScreen({
   scroll = true,
   overlay = overlays.light,
   header,
+  layer,
 }: {
   image?: number | string;
   children: React.ReactNode;
   scroll?: boolean;
   overlay?: readonly [string, string, string];
   header?: React.ReactNode;
+  layer?: React.ReactNode;
 }) {
   const body = scroll ? (
     <ScrollView contentContainerStyle={{ padding: 18, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
@@ -68,6 +70,7 @@ export function NatureScreen({
       <LinearGradient colors={[...overlay]} style={{ flex: 1 }}>
         {header}
         {body}
+        {layer}
       </LinearGradient>
     </ImageBackground>
   );
@@ -157,14 +160,45 @@ export function PracticeNote({ helps, how }: { helps: string; how: string }) {
   );
 }
 
+export function HelpGuide({
+  open,
+  title,
+  lines,
+  onClose,
+}: {
+  open: boolean;
+  title: string;
+  lines: string[];
+  onClose: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <View style={styles.guideOverlay}>
+      <View style={styles.guideCard}>
+        <Text style={styles.guideCardTitle}>{title}</Text>
+        {lines.map((line) => (
+          <Text key={line} style={styles.guideCardBody}>
+            {line}
+          </Text>
+        ))}
+        <Pressable accessibilityRole="button" onPress={onClose} style={styles.guideDone}>
+          <Text style={styles.guideDoneText}>Got it</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 export function ScreenHeader({
   title,
   subtitle,
   onBack,
+  onHelp,
 }: {
   title: string;
   subtitle?: string;
   onBack?: () => void;
+  onHelp?: () => void;
 }) {
   const insets = useSafeAreaInsets();
   return (
@@ -183,6 +217,16 @@ export function ScreenHeader({
           <Text style={styles.kicker}>{title}</Text>
           {subtitle ? <Text style={styles.sub}>{subtitle}</Text> : null}
         </View>
+        {onHelp ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`How to use ${title}`}
+            onPress={onHelp}
+            style={styles.helpBtn}
+          >
+            <Ionicons name="help-outline" size={18} color={colors.ink} />
+          </Pressable>
+        ) : null}
         <PrivacyBadge compact />
       </View>
     </View>
@@ -194,15 +238,24 @@ export function SessionShell({
   subtitle,
   children,
   image = images.moss,
+  onHelp,
+  guide,
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
   image?: number | string;
+  onHelp?: () => void;
+  guide?: React.ReactNode;
 }) {
   useSessionAwake();
   return (
-    <NatureScreen image={image} overlay={overlays.light} header={<ScreenHeader title={title} subtitle={subtitle} />}>
+    <NatureScreen
+      image={image}
+      overlay={overlays.light}
+      header={<ScreenHeader title={title} subtitle={subtitle} onHelp={onHelp} />}
+      layer={guide}
+    >
       {children}
     </NatureScreen>
   );
@@ -327,6 +380,34 @@ const styles = StyleSheet.create({
   },
   practiceHelps: { fontFamily: fonts.bodyMed, color: colors.ink, fontSize: 13, lineHeight: 18 },
   practiceHow: { fontFamily: fonts.body, color: colors.ink, fontSize: 12, lineHeight: 17, marginTop: 3, opacity: 0.9 },
+  helpBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(251,249,245,0.82)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  guideOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 40,
+    backgroundColor: "rgba(61,57,51,0.38)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  guideCard: {
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: 22,
+    padding: 20,
+    backgroundColor: "rgba(251,249,245,0.94)",
+    gap: 8,
+  },
+  guideCardTitle: { fontFamily: fonts.titleBold, color: colors.ink, fontSize: 22, marginBottom: 4 },
+  guideCardBody: { fontFamily: fonts.body, color: colors.ink, fontSize: 15, lineHeight: 22 },
+  guideDone: { marginTop: 10, borderRadius: 999, backgroundColor: colors.sage, paddingVertical: 12, alignItems: "center" },
+  guideDoneText: { fontFamily: fonts.bodyBold, color: colors.linen, fontSize: 15 },
   dim: { flex: 1, backgroundColor: "rgba(61,57,51,0.28)", justifyContent: "flex-end" },
   sheet: {
     backgroundColor: colors.linen,

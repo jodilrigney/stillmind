@@ -14,7 +14,7 @@ import {
   stopTone,
   webNestedMp3Uri,
 } from "../src/audio";
-import { PracticeNote, ScreenHeader } from "../src/components/ui";
+import { HelpGuide, ScreenHeader } from "../src/components/ui";
 import { imgSource, photos } from "../src/images";
 import { useSessionAwake } from "../src/keepAwake";
 import { useOscillate } from "../src/motion";
@@ -35,6 +35,7 @@ export default function Breathe() {
   const [freqId, setFreqId] = useState<FrequencyClipId | null>("528");
   const [musicOn, setMusicOn] = useState(false);
   const [musicVol, setMusicVol] = useState(FREQ_VOL);
+  const [guide, setGuide] = useState(false);
   const scale = useRef(new Animated.Value(0.78)).current;
   const freqScrollRef = useRef<ScrollView>(null);
   const chipX = useRef<Partial<Record<FrequencyClipId, number>>>({});
@@ -186,11 +187,7 @@ export default function Breathe() {
         style={[styles.backdrop, { transform: [{ scale: zoom }, { translateX: shift }] }]}
       />
       <LinearGradient colors={["rgba(231,238,242,0.22)", "rgba(244,240,230,0.38)", "rgba(244,240,230,0.82)"]} style={{ flex: 1 }}>
-        <ScreenHeader title="INHALE" subtitle="A paced breath you can follow." />
-        <PracticeNote
-          helps="Helps with anxiety, tightness, and a breath that will not slow down."
-          how="Match the word in the circle. Inhale, hold, or exhale with the count. 4-4-4-4 steadies you. 4-7-8 is for winding down."
-        />
+        <ScreenHeader title="INHALE" onHelp={() => setGuide(true)} />
         <View style={styles.body}>
           <View style={styles.lift} />
           <View style={styles.center}>
@@ -346,6 +343,16 @@ export default function Breathe() {
           </View>
         </View>
       </LinearGradient>
+      <HelpGuide
+        open={guide}
+        title="How to use Inhale"
+        lines={[
+          "Helps with anxiety, tightness, and a breath that will not slow down.",
+          "Match the word in the circle. Inhale, hold, or exhale with the count.",
+          "4-4-4-4 steadies you. 4-7-8 is for winding down.",
+        ]}
+        onClose={() => setGuide(false)}
+      />
     </View>
   );
 }

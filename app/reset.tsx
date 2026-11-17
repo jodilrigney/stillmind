@@ -17,7 +17,7 @@ import {
   stopFrequencyPad,
 } from "../src/audio";
 import { EftGuide } from "../src/components/EftGuide";
-import { PracticeNote, PrimaryButton, ScreenHeader } from "../src/components/ui";
+import { HelpGuide, PrimaryButton, ScreenHeader } from "../src/components/ui";
 import { EFT_POINTS } from "../src/data";
 import { imgSource, photos } from "../src/images";
 import { useSessionAwake } from "../src/keepAwake";
@@ -82,7 +82,7 @@ const MODES: { id: Mode; label: string }[] = [
   { id: "eft", label: "EFT Tapping Guide" },
 ];
 
-function ResetChrome({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void }) {
+function ResetChrome({ mode, setMode, onHelp }: { mode: Mode; setMode: (m: Mode) => void; onHelp: () => void }) {
   const eft = mode === "eft";
   return (
     <>
@@ -90,18 +90,7 @@ function ResetChrome({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void
         title="STILL-MIND"
         subtitle={eft ? "EFT tapping" : "Left and right tapping"}
         onBack={() => router.replace("/(tabs)")}
-      />
-      <PracticeNote
-        helps={
-          eft
-            ? "Helps with stress, upset, and tension that sits in the body."
-            : "Helps when you feel wired, overwhelmed, or cannot slow down."
-        }
-        how={
-          eft
-            ? "Tap the glowing point. Stay with the feeling. Use Next when you are ready."
-            : "Follow the glow. Tap the same spot on the left, then the right. Choose collarbone or outer arm."
-        }
+        onHelp={onHelp}
       />
       <View style={styles.modes}>
         {MODES.map((m) => (
@@ -123,11 +112,13 @@ function ResetChrome({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void
 export default function Reset() {
   useSessionAwake();
   const [mode, setMode] = useState<Mode>("bilateral");
+  const [guide, setGuide] = useState(false);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const drift = useOscillate(18000);
   const shift = drift.interpolate({ inputRange: [0, 1], outputRange: [-16, 16] });
   const zoom = drift.interpolate({ inputRange: [0, 1], outputRange: [1.1, 1.18] });
-  const chrome = <ResetChrome mode={mode} setMode={setMode} />;
+  const eft = mode === "eft";
+  const chrome = <ResetChrome mode={mode} setMode={setMode} onHelp={() => setGuide(true)} />;
 
   return (
     <View
@@ -152,6 +143,22 @@ export default function Reset() {
           <Eft />
         </View>
       )}
+      <HelpGuide
+        open={guide}
+        title="How to use Still-mind"
+        lines={
+          eft
+            ? [
+                "Helps with stress, upset, and tension that sits in the body.",
+                "Tap the glowing point. Stay with the feeling. Use Next when you are ready.",
+              ]
+            : [
+                "Helps when you feel wired, overwhelmed, or cannot slow down.",
+                "Follow the glow. Tap the same spot on the left, then the right. Choose collarbone or outer arm.",
+              ]
+        }
+        onClose={() => setGuide(false)}
+      />
     </View>
   );
 }

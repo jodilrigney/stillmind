@@ -3,7 +3,7 @@ import * as Haptics from "expo-haptics";
 import { useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Animated, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { Card, Glass, PracticeNote, PrimaryButton, ScreenHeader } from "../src/components/ui";
+import { Card, Glass, HelpGuide, PrimaryButton, ScreenHeader } from "../src/components/ui";
 import { useApp } from "../src/context/AppProvider";
 import { MICRO_ACTIONS, MICRO_ACTIONS_INSIDE } from "../src/data";
 import { imgSource, photos } from "../src/images";
@@ -64,6 +64,7 @@ export default function Ground() {
   useSessionAwake();
   const params = useLocalSearchParams<{ mode?: string }>();
   const [mode, setMode] = useState<Mode>(() => modeFromParam(params.mode));
+  const [guide, setGuide] = useState(false);
   const [i, setI] = useState(0);
   const [checked, setChecked] = useState<boolean[]>(() => Array(5).fill(false));
   const step = STEPS[i];
@@ -86,7 +87,7 @@ export default function Ground() {
       : mode === "spark"
         ? {
             helps: "Helps a stuck, flat, or heavy mood.",
-            how: "Pick one tiny action. Outside is a bonus, not a requirement.",
+            how: "Choose Outside for a small real-world step, or Right here to picture it. Do the action on the screen, or skip to another.",
           }
         : mode === "anchor"
           ? {
@@ -102,8 +103,7 @@ export default function Ground() {
     <View style={styles.screen}>
       <Image source={imgSource(photos.landWindow)} resizeMode="contain" style={styles.backdrop} />
       <View style={{ flex: 1 }}>
-        <ScreenHeader title="LAND" subtitle={subtitle} />
-        <PracticeNote helps={note.helps} how={note.how} />
+        <ScreenHeader title="LAND" onHelp={() => setGuide(true)} />
         <View style={styles.modes}>
           {MODES.map((m) => (
             <Pressable
@@ -202,6 +202,12 @@ export default function Ground() {
           <HoldPanel />
         )}
       </View>
+      <HelpGuide
+        open={guide}
+        title="How to use Land"
+        lines={[subtitle, note.helps, note.how]}
+        onClose={() => setGuide(false)}
+      />
     </View>
   );
 }
@@ -243,7 +249,7 @@ function BodyAnchor() {
 
   return (
     <ScrollView style={styles.anchorScroll} contentContainerStyle={styles.anchorContent} showsVerticalScrollIndicator={false}>
-      <View style={styles.anchorCard}>
+      <Glass style={styles.anchorCard}>
         <Text style={styles.anchorEyebrow}>PROPRIOCEPTIVE GROUNDING</Text>
         {done ? (
           <>
@@ -305,7 +311,7 @@ function BodyAnchor() {
           </>
         )}
         <Text style={styles.anchorSafety}>Use gentle pressure only. Pause or choose another step if anything feels uncomfortable.</Text>
-      </View>
+      </Glass>
     </ScrollView>
   );
 }
@@ -330,31 +336,32 @@ function Spark() {
   return (
     <View style={styles.sparkWrap}>
       <Glass style={styles.sparkCard}>
+        <View pointerEvents="none" style={styles.sparkWash} />
         <View style={styles.sparkTabs}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Toward outside"
+            accessibilityLabel="Outside"
             onPress={() => pickPlace("out")}
             style={[styles.sparkTab, place === "out" && styles.sparkTabOn]}
           >
-            <Text style={[styles.sparkTabText, place === "out" && styles.sparkTabTextOn]}>Toward outside</Text>
+            <Text style={[styles.sparkTabText, place === "out" && styles.sparkTabTextOn]}>Outside</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="From here"
+            accessibilityLabel="Right here"
             onPress={() => pickPlace("in")}
             style={[styles.sparkTab, place === "in" && styles.sparkTabOn]}
           >
-            <Text style={[styles.sparkTabText, place === "in" && styles.sparkTabTextOn]}>From here</Text>
+            <Text style={[styles.sparkTabText, place === "in" && styles.sparkTabTextOn]}>Right here</Text>
           </Pressable>
         </View>
         <Text style={styles.sparkLead}>
           {place === "out"
-            ? "One tiny move toward open air.\nA doorway counts."
-            : "Close your eyes if you like.\nPicture open air — then a tiny reach."}
+            ? "Do one small thing that gets you nearer to fresh air.\nA doorway is enough."
+            : "Stay where you are.\nPicture the outdoors, then do one small movement."}
         </Text>
-        <View>
-          <Text style={styles.sparkKicker}>Just this</Text>
+        <View style={styles.sparkActionBox}>
+          <Text style={styles.sparkKicker}>Try this</Text>
           <Text style={styles.sparkAction}>{action}</Text>
         </View>
         <View>
@@ -366,7 +373,9 @@ function Spark() {
               <PrimaryButton label="Skip" color={colors.sand} onPress={() => go(false)} />
             </View>
           </View>
-          <Text style={styles.sparkFoot}>{done} tiny completions. That's plenty.</Text>
+          <Text style={styles.sparkFoot}>
+            {done === 0 ? "Try one, or skip. Either is enough." : `${done} done. That's enough.`}
+          </Text>
         </View>
       </Glass>
     </View>
@@ -506,7 +515,11 @@ const styles = StyleSheet.create({
   footCopy: { fontFamily: fonts.body, color: colors.muted, fontSize: 13 },
   anchorScroll: { flex: 1 },
   anchorContent: { flexGrow: 1, justifyContent: "center", paddingHorizontal: 18, paddingVertical: 16 },
-  anchorCard: { backgroundColor: "rgba(251,249,245,0.96)", padding: 22, borderRadius: 28 },
+  anchorCard: {
+    padding: 22,
+    borderRadius: 28,
+    backgroundColor: "rgba(251,249,245,0.52)",
+  },
   anchorEyebrow: { fontFamily: fonts.bodyBold, color: colors.sageDeep, fontSize: 11, letterSpacing: 1.4, marginBottom: 18 },
   anchorHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   anchorIcon: {
@@ -518,8 +531,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   anchorStep: { fontFamily: fonts.bodyMed, color: colors.muted, fontSize: 12 },
-  anchorTitle: { fontFamily: fonts.titleBold, color: colors.ink, fontSize: 24, lineHeight: 31, marginTop: 16 },
-  anchorPrompt: { fontFamily: fonts.bodyMed, color: colors.ink, fontSize: 16, lineHeight: 24, marginTop: 10 },
+  anchorTitle: { fontFamily: fonts.titleLight, color: "#2A261F", fontSize: 28, lineHeight: 36, marginTop: 16 },
+  anchorPrompt: { fontFamily: fonts.bodyMed, color: "#2A261F", fontSize: 17, lineHeight: 25, marginTop: 10 },
   anchorAlternative: {
     fontFamily: fonts.body,
     color: colors.ink,
@@ -528,7 +541,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     padding: 12,
     borderRadius: 14,
-    backgroundColor: colors.linen,
+    backgroundColor: "rgba(251,249,245,0.38)",
   },
   anchorDots: { flexDirection: "row", gap: 7, justifyContent: "center", marginVertical: 20 },
   anchorDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "rgba(61,57,51,0.14)" },
@@ -563,14 +576,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingTop: 8,
     paddingBottom: 16,
-    backgroundColor: "rgba(251,249,245,0.64)",
+    overflow: "hidden",
+    backgroundColor: "rgba(242,238,230,0.72)",
+  },
+  sparkWash: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(46,48,42,0.08)",
   },
   sparkLead: {
-    fontFamily: fonts.body,
-    color: "#2A261F",
-    fontSize: 20,
+    fontFamily: fonts.title,
+    color: "#5A544C",
+    fontSize: 22,
     lineHeight: 30,
     textAlign: "center",
+  },
+  sparkActionBox: {
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    borderRadius: 26,
+    backgroundColor: "rgba(251,249,245,0.58)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.35)",
   },
   sparkKicker: {
     fontFamily: fonts.titleBold,
@@ -583,7 +609,7 @@ const styles = StyleSheet.create({
   sparkAction: {
     fontFamily: fonts.titleLight,
     fontSize: 28,
-    lineHeight: 38,
+    lineHeight: 36,
     color: "#2A261F",
     textAlign: "center",
     paddingHorizontal: 8,

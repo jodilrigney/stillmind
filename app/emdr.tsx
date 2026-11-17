@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import { HelpGuide } from "../src/components/ui";
 import { stopBed } from "../src/audio";
 import { useSessionAwake } from "../src/keepAwake";
 import { useLandscapeOnFocus } from "../src/landscape";
@@ -14,6 +15,7 @@ export default function SimpleEmdr() {
   useLandscapeOnFocus();
   const [speed, setSpeed] = useState(0.32);
   const [paused, setPaused] = useState(false);
+  const [guide, setGuide] = useState(false);
   const left = useRef(new Animated.Value(PAD)).current;
   const tNow = useRef(0);
   const dir = useRef<1 | -1>(1);
@@ -89,8 +91,15 @@ export default function SimpleEmdr() {
         </Pressable>
         <View style={styles.titleBlock}>
           <Text style={styles.title}>Simple EMDR</Text>
-          <Text style={styles.sub}>Helps a busy mind with a simple side-to-side eye task. Keep your head still and follow the light.</Text>
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="How to use Simple EMDR"
+          onPress={() => setGuide(true)}
+          style={styles.helpBtn}
+        >
+          <Ionicons name="help-outline" size={18} color={colors.linen} />
+        </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="Slower" onPress={() => setSpeed((v) => Math.max(0.15, +(v - 0.1).toFixed(1)))} style={styles.nudge}>
           <Text style={styles.nudgeText}>-</Text>
         </Pressable>
@@ -99,7 +108,17 @@ export default function SimpleEmdr() {
           <Text style={styles.nudgeText}>+</Text>
         </Pressable>
       </View>
-      <Text style={styles.hint}>{paused ? "Tap the screen to continue." : "Tap the screen to pause. Stop if your eyes or head feel strained."}</Text>
+      <Text style={styles.hint}>{paused ? "Tap the screen to continue." : "Tap the screen to pause."}</Text>
+      <HelpGuide
+        open={guide}
+        title="How to use Simple EMDR"
+        lines={[
+          "Helps a busy mind with a simple side-to-side eye task.",
+          "Keep your head still and follow the light.",
+          "Tap the screen to pause. Stop if your eyes or head feel strained.",
+        ]}
+        onClose={() => setGuide(false)}
+      />
     </View>
   );
 }
@@ -148,7 +167,14 @@ const styles = StyleSheet.create({
   },
   titleBlock: { flex: 1 },
   title: { fontFamily: fonts.titleBold, color: colors.linen, fontSize: 16 },
-  sub: { fontFamily: fonts.body, color: "rgba(251,249,245,0.86)", fontSize: 12, lineHeight: 16, marginTop: 1 },
+  helpBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(251,249,245,0.16)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   nudge: {
     width: 28,
     height: 28,

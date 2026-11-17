@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { Card, PrivacyBadge, SessionShell } from "../src/components/ui";
+import { Card, HelpGuide, PrivacyBadge, SessionShell } from "../src/components/ui";
 import { BrainHealthCategory, FOODS } from "../src/data";
 import { ImageKey, imgSource, images } from "../src/images";
 import { colors, fonts } from "../src/theme";
@@ -8,6 +8,7 @@ import { colors, fonts } from "../src/theme";
 const FILTERS: Array<"All" | BrainHealthCategory> = ["All", "Food", "Nutrient", "Herb"];
 
 export default function BrainHealth() {
+  const [help, setHelp] = useState(false);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("All");
   const [query, setQuery] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -22,7 +23,24 @@ export default function BrainHealth() {
   }, [filter, query]);
 
   return (
-    <SessionShell title="BRAIN HEALTH" subtitle="Food, nutrients & herbs">
+    <SessionShell
+      title="BRAIN HEALTH"
+      subtitle="Food, nutrients & herbs"
+      onHelp={() => setHelp(true)}
+      guide={
+        <HelpGuide
+          open={help}
+          title="How to use Brain Health"
+          lines={[
+            "This is a private educational guide to foods, nutrients, and herbs that may support mood, sleep, and focus. It is not a treatment plan.",
+            "Search or filter by Food, Nutrient, or Herb. Open a card, then tap Sources, evidence & safety for the research notes and cautions.",
+            "Everyday eating patterns matter more than one “perfect” ingredient. No single food treats a mental-health condition.",
+            "Supplements and herbs can interact with medicines. Check with a clinician or dietitian before starting anything new, especially in pregnancy.",
+          ]}
+          onClose={() => setHelp(false)}
+        />
+      }
+    >
       <PrivacyBadge />
       <Text style={styles.copy}>
         Start with a varied food pattern. No single food treats a mental-health condition, and supplements or herbs can interact with medicines.

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { Card, PrimaryButton, SessionShell } from "../src/components/ui";
+import { Card, HelpGuide, PrimaryButton, SessionShell } from "../src/components/ui";
 import { useApp } from "../src/context/AppProvider";
 import { DISTORTIONS } from "../src/data";
 import { store } from "../src/storage";
@@ -28,6 +28,7 @@ const FEELINGS_WHEEL = [
 
 export default function ThoughtRecord() {
   const { thoughts, saveThoughts } = useApp();
+  const [help, setHelp] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [feelingsOpen, setFeelingsOpen] = useState(false);
   const [form, setForm] = useState({
@@ -42,7 +43,24 @@ export default function ThoughtRecord() {
   });
 
   return (
-    <SessionShell title="CBT" subtitle="Thought Record">
+    <SessionShell
+      title="CBT"
+      subtitle="Thought Record"
+      onHelp={() => setHelp(true)}
+      guide={
+        <HelpGuide
+          open={help}
+          title="How to use Thought Record"
+          lines={[
+            "A thought record helps you notice an automatic thought and test it against facts, instead of treating the thought as the whole truth.",
+            "Start with the situation, the feeling, and the thought that showed up.",
+            "Then write facts for and against that thought, and a more balanced view.",
+            "The feelings wheel and thinking patterns are optional. Save stays on this device.",
+          ]}
+          onClose={() => setHelp(false)}
+        />
+      }
+    >
       <Text style={styles.copy}>Start with what happened, how you felt, and the thought that appeared. Then compare that thought with the facts.</Text>
       {FIELDS.map(([key, label, example]) => (
         <View key={key} style={{ marginBottom: 10 }}>

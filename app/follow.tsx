@@ -271,20 +271,15 @@ export default function Follow() {
         </Pressable>
         <Animated.View pointerEvents={chromeUp ? "auto" : "none"} style={[styles.titlePill, { opacity: chrome }]}>
           <Text style={styles.topTitle}>Lighten</Text>
-          <Text style={styles.topHint}>
-            {mode === "feel"
-              ? "Helps a looping mind. Keep your eyes on the light, then tap when you are ready to let it go."
-              : "Helps a busy or overloaded mind. Follow the light with your eyes. Keep your head still."}
-          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="How to use Lighten"
+            onPress={() => setShowGuide(true)}
+            style={styles.helpBtn}
+          >
+            <Ionicons name="help-outline" size={18} color={colors.ink} />
+          </Pressable>
         </Animated.View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="How to use Lighten"
-          onPress={() => setShowGuide(true)}
-          style={styles.helpBtn}
-        >
-          <Ionicons name="help-outline" size={18} color={colors.ink} />
-        </Pressable>
       </View>
       {showGuide ? (
         <View style={styles.guideOverlay}>
@@ -296,7 +291,7 @@ export default function Follow() {
             <Text style={styles.guideCardBody}>If you like, slowly move the phone left and right while your eyes stay with the light.</Text>
             <Text style={styles.guideCardBody}>If you feel dizzy, strained, or unsettled, pause or stop. You can leave at any time.</Text>
             <Pressable accessibilityRole="button" onPress={closeGuide} style={styles.guideDone}>
-              <Text style={styles.guideDoneText}>Begin</Text>
+              <Text style={styles.guideDoneText}>Got it</Text>
             </Pressable>
           </View>
         </View>
@@ -593,10 +588,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   helpBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "rgba(251,249,245,0.78)",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -630,11 +624,15 @@ const styles = StyleSheet.create({
   },
   titlePill: {
     flex: 1,
-    backgroundColor: "rgba(251,249,245,0.52)",
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    gap: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "rgba(251,249,245,0.82)",
+    borderRadius: 999,
+    paddingLeft: 14,
+    paddingRight: 4,
+    paddingVertical: 4,
+    gap: 8,
   },
   topTitle: {
     fontFamily: fonts.bodyMed,
