@@ -40,6 +40,13 @@ function perMin(speed: number) {
   return Math.max(1, Math.round(60000 / sweepMs(speed)));
 }
 
+function guidance(paused: boolean, count: number) {
+  if (paused && count > 0) {
+    return "It's okay to pause. Feel what's here. Let it go when you're ready.";
+  }
+  return "If something comes up, pause. Feel it. Then let it go.";
+}
+
 let clickCtx: AudioContext | null = null;
 
 function playClick(side: "L" | "R") {
@@ -227,7 +234,7 @@ export default function SimpleEmdr() {
         </Pressable>
         <View style={styles.titleBlock}>
           <Text style={styles.title}>Simple EMDR</Text>
-          <Text style={styles.sub}>Follow the light with your eyes. Keep your head still.</Text>
+          <Text style={styles.sub}>Follow the light. You can pause anytime.</Text>
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Full screen" onPress={toggleFullscreen} style={styles.iconBtn}>
           <Ionicons name="expand-outline" size={16} color={colors.linen} />
@@ -252,11 +259,7 @@ export default function SimpleEmdr() {
             <View style={[styles.core, { backgroundColor: color.on }]} />
           </View>
         </View>
-        {paused && !resting ? (
-          <Text style={styles.ready}>{count === 0 ? "Press Start, then follow the light." : "Paused"}</Text>
-        ) : (
-          <Text style={styles.ready}> </Text>
-        )}
+        {resting ? null : <Text style={styles.ready}>{guidance(paused, count)}</Text>}
       </View>
 
       <View style={[styles.dock, { paddingBottom: Math.max(12, insets.bottom + 8) }]}>
@@ -328,13 +331,16 @@ export default function SimpleEmdr() {
       {resting ? (
         <View style={styles.rest}>
           <View style={styles.restCard}>
-            <Text style={styles.restTitle}>Rest</Text>
-            <Text style={styles.restBody}>Take a breath. Let it go. Notice what is here — a thought, a feeling, or a body sensation.</Text>
+            <Text style={styles.restTitle}>Feel, then let go</Text>
+            <Text style={styles.restBody}>
+              Something may have come up — a thought, a feeling, or a sensation in the body. You don't have to fix it. Pause with it. Breathe. Let it go when you're ready.
+            </Text>
+            <Text style={styles.restSoft}>Continue only if it feels okay. Stopping is part of taking care of yourself.</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Start the next set" onPress={nextSet} style={styles.restBtn}>
-              <Text style={styles.restBtnText}>Next set</Text>
+              <Text style={styles.restBtnText}>I'm ready to continue</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" onPress={stopAndReset}>
-              <Text style={styles.restStop}>Stop</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Stop for now" onPress={stopAndReset}>
+              <Text style={styles.restStop}>Stop for now</Text>
             </Pressable>
           </View>
         </View>
@@ -344,11 +350,11 @@ export default function SimpleEmdr() {
         open={guide}
         title="How to use Simple EMDR"
         lines={[
-          "This is a bilateral eye-movement helper: one light to follow. It is not EMDR therapy with a clinician.",
-          "Sit comfortably. Keep your head facing forward. Follow the single light with your eyes only.",
-          "Start is Slow on purpose. Nudge the slider only if your eyes can follow easily.",
-          "A set of 24 sweeps is a common starting length. After a set, rest and notice what comes up.",
-          "Optional tones mark left and right. Stop if you feel dizzy, nauseous, or overwhelmed.",
+          "This is a gentle eye-movement helper: one light to follow. It is not EMDR therapy with a clinician.",
+          "Sit comfortably. Keep your head still. Follow the light with your eyes only.",
+          "If something comes up — a feeling, a memory, a tightness — pause. Feel it. Then let it go. You can stop anytime. That is part of the practice.",
+          "Start is Slow on purpose. Use the slider only if your eyes can follow easily.",
+          "After a set, rest with whatever is here. Continue only if it feels okay. Stop if you feel dizzy, nauseous, or overwhelmed.",
         ]}
         onClose={() => setGuide(false)}
       />
@@ -471,12 +477,14 @@ const styles = StyleSheet.create({
     borderRadius: LIGHT / 2,
   },
   ready: {
-    marginTop: 10,
+    marginTop: 18,
     textAlign: "center",
     fontFamily: fonts.body,
-    color: "rgba(251,249,245,0.55)",
-    fontSize: 13,
-    minHeight: 18,
+    color: "rgba(251,249,245,0.72)",
+    fontSize: 15,
+    lineHeight: 22,
+    minHeight: 44,
+    paddingHorizontal: 12,
   },
   dock: {
     paddingHorizontal: 14,
@@ -569,6 +577,7 @@ const styles = StyleSheet.create({
   },
   restTitle: { fontFamily: fonts.titleBold, color: colors.ink, fontSize: 22 },
   restBody: { fontFamily: fonts.body, color: colors.ink, fontSize: 16, lineHeight: 24 },
+  restSoft: { fontFamily: fonts.body, color: colors.muted, fontSize: 14, lineHeight: 21 },
   restBtn: {
     marginTop: 6,
     borderRadius: 999,
