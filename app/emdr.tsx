@@ -40,9 +40,9 @@ function perMin(speed: number) {
   return Math.max(1, Math.round(60000 / sweepMs(speed)));
 }
 
-function guidance(paused: boolean, count: number) {
-  if (paused && count > 0) {
-    return "It's okay to pause. Feel what's here. Let it go when you're ready.";
+function guidance(paused: boolean, hasRun: boolean) {
+  if (paused && hasRun) {
+    return "It's okay to pause. Slide the light to where you felt it. Then let it go.";
   }
   return "If something comes up, pause. Feel it. Then let it go.";
 }
@@ -99,6 +99,7 @@ export default function SimpleEmdr() {
   const [colorId, setColorId] = useState<ColorId>("green");
   const [clicks, setClicks] = useState(false);
   const [haptic, setHaptic] = useState(false);
+  const [hasRun, setHasRun] = useState(false);
   const [pos, setPos] = useState(0);
   const tNow = useRef(0);
   const dir = useRef<1 | -1>(1);
@@ -111,6 +112,9 @@ export default function SimpleEmdr() {
   const clicksRef = useRef(clicks);
   const hapticRef = useRef(haptic);
   const posRef = useRef(0);
+  const dragging = useRef(false);
+  const trackRef = useRef<View>(null);
+  const trackBox = useRef({ left: 0, width: 1 });
   const color = COLORS.find((item) => item.id === colorId) ?? COLORS[2];
 
   durationRef.current = sweepMs(speed);
@@ -138,7 +142,7 @@ export default function SimpleEmdr() {
       stopBed();
       let last = Date.now();
       const tick = () => {
-        if (running.current) {
+        if (running.current && !dragging.current) {
           const now = Date.now();
           const dt = Math.min(48, now - last);
           last = now;
@@ -180,7 +184,9 @@ export default function SimpleEmdr() {
       if (target && ["INPUT", "TEXTAREA"].includes(target.tagName)) return;
       if (e.code === "Space" || e.key === " ") {
         e.preventDefault();
-        if (!resting) setPaused((v) => !v);
+        if (resting) return;
+        if (paused) setHasRun(true);
+        setPaused((v) => !v);
         return;
       }
       if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
@@ -198,7 +204,7 @@ export default function SimpleEmdr() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [resting]);
+  }, [resting, paused]);
 
   const stopAndReset = () => {
     running.current = false;
@@ -209,6 +215,7 @@ export default function SimpleEmdr() {
     setPos(0);
     setCount(0);
     setPaused(true);
+    setHasRun(false);
     setResting(false);
   };
 
@@ -226,6 +233,90 @@ export default function SimpleEmdr() {
     setResting(false);
   };
 
+  const togglePause = () => {
+    if (resting || dragging.current) return;
+    if (paused) setHasRun(true);
+    setPaused((v) => !v);
+  };
+
+  const measureTrack = () => {
+    const node = trackRef.current as unknown as { getBoundingClientRect?: () => DOMRect } | null;
+    const box = node?.getBoundingClientRect?.();
+    if (box && box.width > 0) {
+      trackBox.current = { left: box.left, width: box.width };
+    }
+  };
+
+  const placeAt = (clientX: number) => {
+    const { left, width } = trackBox.current;
+    const t = Math.max(0, Math.min(1, (clientX - left) / Math.max(1, width)));
+    tNow.current = t;
+    posRef.current = t;
+    setPos(t);
+  };
+
+  const beginDrag = (clientX: number) => {
+    if (resting) return;
+    measureTrack();
+    dragging.current = true;
+    running.current = false;
+    setPaused(true);
+    setHasRun(true);
+    placeAt(clientX);
+  };
+
+  const endDrag = () => {
+    dragging.current = false;
+  };
+
+  const dragBind =
+    Platform.OS === "web"
+      ? {
+          onPointerDown: (e: {
+            stopPropagation: () => void;
+            preventDefault: () => void;
+            currentTarget: { setPointerCapture?: (id: number) => void };
+            nativeEvent: { pointerId: number; clientX?: number; pageX?: number; offsetX?: number };
+          }) => {
+            e.stopPropagation();
+            e.preventDefault();
+            e.currentTarget.setPointerCapture?.(e.nativeEvent.pointerId);
+            const x = e.nativeEvent.clientX ?? e.nativeEvent.pageX ?? trackBox.current.left + (e.nativeEvent.offsetX ?? 0);
+            beginDrag(x);
+          },
+          onPointerMove: (e: { nativeEvent: { clientX?: number; pageX?: number; offsetX?: number } }) => {
+            if (!dragging.current) return;
+            const x = e.nativeEvent.clientX ?? e.nativeEvent.pageX ?? trackBox.current.left + (e.nativeEvent.offsetX ?? 0);
+            placeAt(x);
+          },
+          onPointerUp: (e: { stopPropagation: () => void }) => {
+            e.stopPropagation();
+            endDrag();
+          },
+          onPointerCancel: () => {
+            endDrag();
+          },
+        }
+      : {
+          onStartShouldSetResponder: () => true,
+          onMoveShouldSetResponder: () => true,
+          onResponderGrant: (e: { nativeEvent: { locationX: number } }) => {
+            const width = trackBox.current.width || 1;
+            beginDrag(trackBox.current.left + e.nativeEvent.locationX);
+            trackBox.current.width = width;
+          },
+          onResponderMove: (e: { nativeEvent: { locationX: number } }) => {
+            if (!dragging.current) return;
+            const width = Math.max(1, trackBox.current.width);
+            const t = Math.max(0, Math.min(1, e.nativeEvent.locationX / width));
+            tNow.current = t;
+            posRef.current = t;
+            setPos(t);
+          },
+          onResponderRelease: endDrag,
+          onResponderTerminate: endDrag,
+        };
+
   return (
     <View style={styles.screen}>
       <View pointerEvents="box-none" style={[styles.topBar, { paddingTop: Math.max(10, insets.top) }]}>
@@ -234,7 +325,7 @@ export default function SimpleEmdr() {
         </Pressable>
         <View style={styles.titleBlock}>
           <Text style={styles.title}>Simple EMDR</Text>
-          <Text style={styles.sub}>Follow the light. You can pause anytime.</Text>
+          <Text style={styles.sub}>Follow the light. Keep breathing naturally.</Text>
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Full screen" onPress={toggleFullscreen} style={styles.iconBtn}>
           <Ionicons name="expand-outline" size={16} color={colors.linen} />
@@ -245,9 +336,23 @@ export default function SimpleEmdr() {
       </View>
 
       <View style={styles.stage}>
-        <View style={styles.track}>
-          <View style={styles.rail} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={paused ? "Resume the light" : "Pause the light"}
+          onPress={togglePause}
+          style={styles.stageHit}
+        />
+        <View
+          ref={trackRef}
+          onLayout={(e) => {
+            trackBox.current.width = e.nativeEvent.layout.width;
+          }}
+          {...(dragBind as object)}
+          style={styles.track}
+        >
+          <View pointerEvents="none" style={styles.rail} />
           <View
+            pointerEvents="none"
             style={[
               styles.light,
               {
@@ -259,7 +364,12 @@ export default function SimpleEmdr() {
             <View style={[styles.core, { backgroundColor: color.on }]} />
           </View>
         </View>
-        {resting ? null : <Text style={styles.ready}>{guidance(paused, count)}</Text>}
+        {resting ? null : (
+          <View pointerEvents="none" style={styles.prompt}>
+            <Text style={styles.ready}>{guidance(paused, hasRun)}</Text>
+            <Text style={styles.breathe}>Keep breathing naturally. No need to change it.</Text>
+          </View>
+        )}
       </View>
 
       <View style={[styles.dock, { paddingBottom: Math.max(12, insets.bottom + 8) }]}>
@@ -267,9 +377,7 @@ export default function SimpleEmdr() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={paused ? "Start" : "Pause"}
-            onPress={() => {
-              if (!resting) setPaused((v) => !v);
-            }}
+            onPress={togglePause}
             style={[styles.startBtn, paused && styles.startBtnOn]}
           >
             <Ionicons name={paused ? "play" : "pause"} size={18} color={paused ? "#102018" : colors.linen} />
@@ -333,7 +441,7 @@ export default function SimpleEmdr() {
           <View style={styles.restCard}>
             <Text style={styles.restTitle}>Feel, then let go</Text>
             <Text style={styles.restBody}>
-              Something may have come up — a thought, a feeling, or a sensation in the body. You don't have to fix it. Pause with it. Breathe. Let it go when you're ready.
+              Something may have come up — a thought, a feeling, or a sensation in the body. You don't have to fix it. Pause with it. Keep breathing naturally. Let it go when you're ready.
             </Text>
             <Text style={styles.restSoft}>Continue only if it feels okay. Stopping is part of taking care of yourself.</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Start the next set" onPress={nextSet} style={styles.restBtn}>
@@ -351,8 +459,8 @@ export default function SimpleEmdr() {
         title="How to use Simple EMDR"
         lines={[
           "This is a gentle eye-movement helper: one light to follow. It is not EMDR therapy with a clinician.",
-          "Sit comfortably. Keep your head still. Follow the light with your eyes only.",
-          "If something comes up — a feeling, a memory, a tightness — pause. Feel it. Then let it go. You can stop anytime. That is part of the practice.",
+          "Sit comfortably. Keep your head still. Follow the light with your eyes only. Keep breathing naturally — no holding, no special pattern.",
+          "If something comes up — a feeling, a memory, a tightness — tap the screen to pause. Drag the light along the line to where you felt it. Stay with it, then let it go. You can stop anytime.",
           "Start is Slow on purpose. Use the slider only if your eyes can follow easily.",
           "After a set, rest with whatever is here. Continue only if it feels okay. Stop if you feel dizzy, nauseous, or overwhelmed.",
         ]}
@@ -446,9 +554,17 @@ const styles = StyleSheet.create({
   title: { fontFamily: fonts.titleBold, color: colors.linen, fontSize: 16, letterSpacing: 0.6 },
   sub: { fontFamily: fonts.body, color: "rgba(251,249,245,0.55)", fontSize: 12, marginTop: 1 },
   stage: { flex: 1, justifyContent: "center", paddingHorizontal: 56 },
+  stageHit: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
+    cursor: "pointer",
+  },
   track: {
+    position: "relative",
+    zIndex: 2,
     height: 96,
     justifyContent: "center",
+    cursor: "grab",
   },
   rail: {
     height: 2,
@@ -476,15 +592,20 @@ const styles = StyleSheet.create({
     height: LIGHT,
     borderRadius: LIGHT / 2,
   },
+  prompt: { marginTop: 18, paddingHorizontal: 12, gap: 6, minHeight: 56 },
   ready: {
-    marginTop: 18,
     textAlign: "center",
     fontFamily: fonts.body,
     color: "rgba(251,249,245,0.72)",
     fontSize: 15,
     lineHeight: 22,
-    minHeight: 44,
-    paddingHorizontal: 12,
+  },
+  breathe: {
+    textAlign: "center",
+    fontFamily: fonts.bodyMed,
+    color: "rgba(251,249,245,0.58)",
+    fontSize: 14,
+    lineHeight: 20,
   },
   dock: {
     paddingHorizontal: 14,
