@@ -2,7 +2,7 @@ name: Deploy web
 
 on:
   push:
-    branches: [main, cursor/calmer-home-and-practice-flow]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
