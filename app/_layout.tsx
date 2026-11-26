@@ -18,7 +18,7 @@ import { Animated, Easing, Platform, useWindowDimensions, View } from "react-nat
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { stopPannedBed, stopTriCalm } from "../src/audio";
 import { AppProvider } from "../src/context/AppProvider";
-import { useAppLandscape } from "../src/landscape";
+import { useAppLandscape, useUnlockedOrientation } from "../src/landscape";
 import { colors } from "../src/theme";
 import { useBottomGap } from "../src/useBottomGap";
 
@@ -63,13 +63,14 @@ function ScreenShell({ children, bottomGap }: { children: React.ReactNode; botto
 }
 
 function PhoneFrame({ children }: { children: React.ReactNode }) {
+  useUnlockedOrientation();
   const flagged = useAppLandscape();
   const pathname = usePathname();
   const { width: vw, height: vh } = useWindowDimensions();
   const bottomGap = useBottomGap();
   const deviceLandscape = vw >= vh;
-  const phoneWeb = Platform.OS === "web" && vw > 0 && vw < 700;
-  // Lighten stays landscape-locked; Tri-Calm starts portrait and follows the phone.
+  // Short side stays phone-sized in both portrait and landscape.
+  const phoneWeb = Platform.OS === "web" && Math.min(vw, vh) > 0 && Math.min(vw, vh) < 520;
   const landscape =
     flagged || pathname === "/follow" || pathname === "/emdr" || (pathname === "/tri-calm" && deviceLandscape);
   const turn = useRef(new Animated.Value(landscape ? 1 : 0)).current;
@@ -92,35 +93,13 @@ function PhoneFrame({ children }: { children: React.ReactNode }) {
     return <View style={[fill, { backgroundColor: colors.linen }]}>{children}</View>;
   }
 
-  // Real phones: fill the screen and keep a strip clear for Back / Home.
-  if (phoneWeb && !(landscape && vh > vw)) {
+  // Real phones fill the screen and follow the device. No fake 90° spin.
+  if (phoneWeb) {
     return <ScreenShell bottomGap={bottomGap}>{children}</ScreenShell>;
   }
 
-  if (landscape && vw >= vh) {
-    return <ScreenShell bottomGap={phoneWeb ? bottomGap : 0}>{children}</ScreenShell>;
-  }
-
-  if (landscape && vh > vw) {
-    return (
-      <View style={[fill, { backgroundColor: "#0E1612", overflow: "hidden" }]}>
-        <View
-          style={{
-            position: "absolute",
-            width: vh,
-            height: vw,
-            top: (vh - vw) / 2,
-            left: (vw - vh) / 2,
-            transform: [{ rotate: "90deg" }],
-            transformOrigin: "center",
-            backgroundColor: colors.linen,
-            overflow: "hidden",
-          }}
-        >
-          {children}
-        </View>
-      </View>
-    );
+  if (landscape && deviceLandscape) {
+    return <ScreenShell bottomGap={0}>{children}</ScreenShell>;
   }
 
   const width = turn.interpolate({ inputRange: [0, 1], outputRange: [390, 844] });

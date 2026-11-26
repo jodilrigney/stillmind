@@ -317,7 +317,7 @@ export default function SimpleEmdr() {
         title="How to use this EMDR tool"
         lines={[
           "This is a bilateral eye-movement helper. It is not a substitute for EMDR therapy with a clinician.",
-          "Sit comfortably. Keep your head facing forward and still. Follow the light with your eyes only.",
+          "Sit comfortably. Keep your head facing forward and still. Follow the light with your eyes only. Turn the phone sideways for a longer path, or stay upright — both work.",
           "Use the speed slider until the motion feels smooth, not strained. Pause anytime, or tap the screen, or press space.",
           "A set is a round of left-right movements. 24 is a common starting length. After a set, rest and notice what comes up, then continue.",
           "Optional clicks mark each side. Stop if you feel dizzy, nauseous, or overwhelmed.",

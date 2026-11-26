@@ -30,26 +30,16 @@ function settle(p: unknown) {
   }
 }
 
-function lockLandscape() {
-  try {
-    settle(ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE));
-  } catch {
-    /* web / unsupported devices */
-  }
-  if (Platform.OS !== "web") return;
-  try {
-    const lock = screen?.orientation?.lock;
-    if (typeof lock === "function") settle(lock.call(screen.orientation, "landscape"));
-  } catch {
-    /* browsers only allow this after a gesture / fullscreen */
-  }
-}
-
-function unlockLandscape() {
+function unlockAll() {
   try {
     settle(ScreenOrientation.unlockAsync());
   } catch {
     /* web / unsupported devices */
+  }
+  try {
+    settle(ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.DEFAULT));
+  } catch {
+    /* some platforms only support unlock */
   }
   if (Platform.OS !== "web") return;
   try {
@@ -59,14 +49,21 @@ function unlockLandscape() {
   }
 }
 
+export function useUnlockedOrientation() {
+  useEffect(() => {
+    unlockAll();
+  }, []);
+}
+
+/** Desktop preview can go wide; the phone itself is never locked. */
 export function useLandscapeOnFocus() {
   useFocusEffect(
     useCallback(() => {
       setAppLandscape(true);
-      lockLandscape();
+      unlockAll();
       return () => {
         setAppLandscape(false);
-        unlockLandscape();
+        unlockAll();
       };
     }, [])
   );
@@ -77,21 +74,10 @@ export function useRotatableOnFocus() {
   useFocusEffect(
     useCallback(() => {
       setAppLandscape(false);
-      try {
-        settle(ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.DEFAULT));
-      } catch {
-        unlockLandscape();
-      }
-      if (Platform.OS === "web") {
-        try {
-          screen?.orientation?.unlock?.();
-        } catch {
-          /* ignore */
-        }
-      }
+      unlockAll();
       return () => {
         setAppLandscape(false);
-        unlockLandscape();
+        unlockAll();
       };
     }, [])
   );
