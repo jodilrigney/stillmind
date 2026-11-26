@@ -10,17 +10,17 @@ import { useSessionAwake } from "../src/keepAwake";
 import { useLandscapeOnFocus } from "../src/landscape";
 import { colors, fonts } from "../src/theme";
 
-const LEDS = 21;
 const SETS = [24, 30, 40, 0] as const;
 const SLOW_MS = 3400;
 const FAST_MS = 1200;
 const END_HOLD_MS = 280;
 const DEFAULT_SPEED = 0.16;
+const LIGHT = 28;
 const COLORS = [
-  { id: "amber", on: "#FFE27A", dim: "rgba(255, 226, 122, 0.16)" },
-  { id: "white", on: "#F4F7FF", dim: "rgba(244, 247, 255, 0.14)" },
-  { id: "green", on: "#8EE0B0", dim: "rgba(142, 224, 176, 0.16)" },
-  { id: "blue", on: "#9BD2F2", dim: "rgba(155, 210, 242, 0.16)" },
+  { id: "amber", on: "#FFE27A", glow: "rgba(255, 226, 122, 0.38)" },
+  { id: "white", on: "#F4F7FF", glow: "rgba(244, 247, 255, 0.32)" },
+  { id: "green", on: "#8EE0B0", glow: "rgba(142, 224, 176, 0.36)" },
+  { id: "blue", on: "#9BD2F2", glow: "rgba(155, 210, 242, 0.36)" },
 ] as const;
 
 type ColorId = (typeof COLORS)[number]["id"];
@@ -92,7 +92,7 @@ export default function SimpleEmdr() {
   const [colorId, setColorId] = useState<ColorId>("green");
   const [clicks, setClicks] = useState(false);
   const [haptic, setHaptic] = useState(false);
-  const [led, setLed] = useState(0);
+  const [pos, setPos] = useState(0);
   const tNow = useRef(0);
   const dir = useRef<1 | -1>(1);
   const raf = useRef<number | null>(null);
@@ -103,7 +103,7 @@ export default function SimpleEmdr() {
   const setSizeRef = useRef(setSize);
   const clicksRef = useRef(clicks);
   const hapticRef = useRef(haptic);
-  const ledRef = useRef(0);
+  const posRef = useRef(0);
   const color = COLORS.find((item) => item.id === colorId) ?? COLORS[2];
 
   durationRef.current = sweepMs(speed);
@@ -148,12 +148,9 @@ export default function SimpleEmdr() {
               holdUntil.current = now + END_HOLD_MS;
               onEdge("L");
             }
-            const next = tNow.current * (LEDS - 1);
-            if (Math.round(next) !== Math.round(ledRef.current)) {
-              ledRef.current = next;
-              setLed(next);
-            } else {
-              ledRef.current = next;
+            if (Math.abs(tNow.current - posRef.current) >= 0.001) {
+              posRef.current = tNow.current;
+              setPos(tNow.current);
             }
           }
         } else {
@@ -200,9 +197,9 @@ export default function SimpleEmdr() {
     running.current = false;
     tNow.current = 0;
     dir.current = 1;
-    ledRef.current = 0;
+    posRef.current = 0;
     countRef.current = 0;
-    setLed(0);
+    setPos(0);
     setCount(0);
     setPaused(true);
     setResting(false);
@@ -222,8 +219,6 @@ export default function SimpleEmdr() {
     setResting(false);
   };
 
-  const lit = Math.max(0, Math.min(LEDS - 1, led));
-
   return (
     <View style={styles.screen}>
       <View pointerEvents="box-none" style={[styles.topBar, { paddingTop: Math.max(10, insets.top) }]}>
@@ -231,40 +226,34 @@ export default function SimpleEmdr() {
           <Ionicons name="chevron-back" size={20} color={colors.linen} />
         </Pressable>
         <View style={styles.titleBlock}>
-          <Text style={styles.title}>EMDR light bar</Text>
-          <Text style={styles.sub}>Keep your head still. Follow with your eyes.</Text>
+          <Text style={styles.title}>Simple EMDR</Text>
+          <Text style={styles.sub}>Follow the light with your eyes. Keep your head still.</Text>
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Full screen" onPress={toggleFullscreen} style={styles.iconBtn}>
           <Ionicons name="expand-outline" size={16} color={colors.linen} />
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="How to use the EMDR light bar" onPress={() => setGuide(true)} style={styles.iconBtn}>
+        <Pressable accessibilityRole="button" accessibilityLabel="How to use Simple EMDR" onPress={() => setGuide(true)} style={styles.iconBtn}>
           <Ionicons name="help-outline" size={18} color={colors.linen} />
         </Pressable>
       </View>
 
       <View style={styles.stage}>
-        <View style={styles.tube}>
-          {Array.from({ length: LEDS }, (_, i) => {
-            const d = Math.abs(i - lit);
-            const on = d < 0.55;
-            const near = d < 1.2;
-            return (
-              <View
-                key={i}
-                style={[
-                  styles.led,
-                  {
-                    backgroundColor: on ? color.on : near ? color.dim : "rgba(251,249,245,0.07)",
-                    transform: [{ scale: on ? 1.55 : near ? 1.12 : 1 }],
-                    opacity: on ? 1 : near ? 0.9 : 0.45,
-                  },
-                ]}
-              />
-            );
-          })}
+        <View style={styles.track}>
+          <View style={styles.rail} />
+          <View
+            style={[
+              styles.light,
+              {
+                left: `${Math.round(pos * 1000) / 10}%`,
+              },
+            ]}
+          >
+            <View style={[styles.glow, { backgroundColor: color.glow }]} />
+            <View style={[styles.core, { backgroundColor: color.on }]} />
+          </View>
         </View>
         {paused && !resting ? (
-          <Text style={styles.ready}>{count === 0 ? "Set the speed, then press Start." : "Paused"}</Text>
+          <Text style={styles.ready}>{count === 0 ? "Press Start, then follow the light." : "Paused"}</Text>
         ) : (
           <Text style={styles.ready}> </Text>
         )}
@@ -353,11 +342,11 @@ export default function SimpleEmdr() {
 
       <HelpGuide
         open={guide}
-        title="How to use the light bar"
+        title="How to use Simple EMDR"
         lines={[
-          "This is a bilateral eye-movement helper, like a clinic light bar. It is not EMDR therapy with a clinician.",
-          "Sit comfortably. Keep your head facing forward. Follow the lit LED with your eyes only.",
-          "Start is Slow on purpose — about the pace other calming tools use. Nudge the slider only if your eyes can follow easily.",
+          "This is a bilateral eye-movement helper: one light to follow. It is not EMDR therapy with a clinician.",
+          "Sit comfortably. Keep your head facing forward. Follow the single light with your eyes only.",
+          "Start is Slow on purpose. Nudge the slider only if your eyes can follow easily.",
           "A set of 24 sweeps is a common starting length. After a set, rest and notice what comes up.",
           "Optional tones mark left and right. Stop if you feel dizzy, nauseous, or overwhelmed.",
         ]}
@@ -450,26 +439,39 @@ const styles = StyleSheet.create({
   titleBlock: { flex: 1 },
   title: { fontFamily: fonts.titleBold, color: colors.linen, fontSize: 16, letterSpacing: 0.6 },
   sub: { fontFamily: fonts.body, color: "rgba(251,249,245,0.55)", fontSize: 12, marginTop: 1 },
-  stage: { flex: 1, justifyContent: "center", paddingHorizontal: 28 },
-  tube: {
-    height: 52,
-    borderRadius: 26,
-    paddingHorizontal: 16,
-    backgroundColor: "#11161A",
-    borderWidth: 1,
-    borderColor: "rgba(251,249,245,0.08)",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    overflow: "visible",
+  stage: { flex: 1, justifyContent: "center", paddingHorizontal: 56 },
+  track: {
+    height: 96,
+    justifyContent: "center",
   },
-  led: {
-    width: 11,
-    height: 11,
-    borderRadius: 6,
+  rail: {
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: "rgba(251,249,245,0.12)",
+  },
+  light: {
+    position: "absolute",
+    top: "50%",
+    width: 72,
+    height: 72,
+    marginTop: -36,
+    marginLeft: -36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  glow: {
+    position: "absolute",
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+  },
+  core: {
+    width: LIGHT,
+    height: LIGHT,
+    borderRadius: LIGHT / 2,
   },
   ready: {
-    marginTop: 18,
+    marginTop: 10,
     textAlign: "center",
     fontFamily: fonts.body,
     color: "rgba(251,249,245,0.55)",
