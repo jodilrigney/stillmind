@@ -358,11 +358,11 @@ export default function Follow() {
             />
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Open the EMDR light bar"
+              accessibilityLabel="Open Simple EMDR"
               onPress={() => router.push("/emdr")}
               style={styles.forestChip}
             >
-              <Text style={styles.forestText}>EMDR</Text>
+              <Text style={styles.forestText}>Simple EMDR</Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
