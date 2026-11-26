@@ -11,10 +11,10 @@ import { useLandscapeOnFocus } from "../src/landscape";
 import { colors, fonts } from "../src/theme";
 
 const SETS = [24, 30, 40, 0] as const;
-const SLOW_MS = 3400;
-const FAST_MS = 1200;
-const END_HOLD_MS = 280;
-const DEFAULT_SPEED = 0.16;
+const SLOW_MS = 7200;
+const FAST_MS = 2400;
+const END_HOLD_MS = 420;
+const DEFAULT_SPEED = 0;
 const LIGHT = 28;
 const COLORS = [
   { id: "amber", on: "#FFE27A", glow: "rgba(255, 226, 122, 0.38)" },
