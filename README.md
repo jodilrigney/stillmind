@@ -10,4 +10,10 @@ or the GitHub text file:
 
 https://github.com/jodilrigney/stillmind/blob/main/public/overview.md
 
-The live site is a JavaScript app. Language models usually cannot “see” its screens. The overview pages are plain text so they can read Lighten, Simple EMDR, and the rest of StillMind.
+The live site is a JavaScript app. Language models cannot click it or see the pictures it draws on screen. Share the overview, or these screenshot files:
+
+- https://jodilrigney.github.io/stillmind/screenshots/still-home.png
+- https://jodilrigney.github.io/stillmind/screenshots/lighten.jpg
+- https://jodilrigney.github.io/stillmind/screenshots/simple-emdr.png
+
+Uploading those pictures into ChatGPT is the most reliable way for it to see them.

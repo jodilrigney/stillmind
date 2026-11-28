@@ -6,6 +6,14 @@ This page is a complete text description of StillMind so a person or a language 
 
 **This readable overview:** https://jodilrigney.github.io/stillmind/overview.html
 
+ChatGPT cannot see pictures inside the live JavaScript app. It can look at these screenshot files (or you can upload them into the chat):
+
+![StillMind home](https://jodilrigney.github.io/stillmind/screenshots/still-home.png)
+
+![Lighten firefly](https://jodilrigney.github.io/stillmind/screenshots/lighten.jpg)
+
+![Simple EMDR tracking light](https://jodilrigney.github.io/stillmind/screenshots/simple-emdr.png)
+
 StillMind is a privacy-first mental-health calm space. Health data stays on the device. Nothing is uploaded to a server. “Google” in the app is only a local label so one phone can remember you.
 
 It is not a replacement for therapy, emergency care, or a clinician.
@@ -76,4 +84,4 @@ Help text also says: sit with head still; follow with the eyes only; no special 
 
 ## What a language model cannot do
 
-Opening the live app URL does not reveal screens, because the app is a JavaScript single-page app. Use this overview (or the GitHub markdown) instead of the live URL when you need to read every feature.
+Opening the live app URL does not reveal screens or pictures, because the app is a JavaScript single-page app. Use this overview, the screenshot image files, or upload those pictures into the chat.

@@ -12,17 +12,31 @@
     code, .url { font-family: ui-monospace, monospace; font-size: 0.92em; word-break: break-all; }
     ul { padding-left: 1.2rem; }
     .note { background: #ede6d8; padding: 0.9rem 1rem; border-radius: 12px; }
+    img { display: block; width: 100%; max-width: 42rem; border-radius: 14px; margin: 0.8rem 0 1.4rem; }
+    figcaption { font-size: 0.92rem; color: #5c5850; margin-top: -0.8rem; margin-bottom: 1.4rem; }
   </style>
 </head>
 <body>
-  <p class="note">This is a <strong>readable description</strong> of StillMind. ChatGPT and other language models can open this page. The live app at github.io needs a real browser because it runs in JavaScript.</p>
+  <p class="note">This is a <strong>readable description with pictures</strong> of StillMind. ChatGPT cannot click the live JavaScript app. It can open this page, and it can look at the screenshot image files linked below. Uploading those pictures into the ChatGPT chat is the most reliable way for it to see them.</p>
   <h1>StillMind</h1>
   <p>Privacy-first mental-health calm space. Health data stays on the device. Nothing is uploaded. Not a replacement for therapy or emergency care.</p>
   <p>Live app (browser only): <span class="url">https://jodilrigney.github.io/stillmind/</span></p>
   <p>This overview: <span class="url">https://jodilrigney.github.io/stillmind/overview.html</span></p>
   <p>Markdown for models: <span class="url">https://github.com/jodilrigney/stillmind/blob/main/public/overview.md</span></p>
 
+  <h2>Pictures ChatGPT can open</h2>
+  <p>These are real image files, not the live app:</p>
+  <ul>
+    <li><span class="url">https://jodilrigney.github.io/stillmind/screenshots/still-home.png</span></li>
+    <li><span class="url">https://jodilrigney.github.io/stillmind/screenshots/lighten.jpg</span></li>
+    <li><span class="url">https://jodilrigney.github.io/stillmind/screenshots/simple-emdr.png</span></li>
+  </ul>
+
   <h2>Home (STILL)</h2>
+  <figure>
+    <img src="screenshots/still-home.png" alt="StillMind home: STILL practices Still-mind, Tri-Calm, Inhale, Lighten, and Land, plus gratitude and bottom tabs." />
+    <figcaption>Home. Choose what you need: Still-mind, Tri-Calm, Inhale, Lighten, or Land.</figcaption>
+  </figure>
   <ul>
     <li><strong>S Still-mind (Reset)</strong> — tapping to settle a wired body and mind</li>
     <li><strong>T Tri-Calm</strong> — hold both sides when you feel split</li>
@@ -34,9 +48,17 @@
 
   <h2>Lighten vs Simple EMDR</h2>
   <p><strong>Lighten</strong> (<code>/follow</code>) is a forest firefly you follow. It is not Simple EMDR.</p>
+  <figure>
+    <img src="screenshots/lighten.jpg" alt="Lighten: a dark forest river with one glowing firefly light on the left to follow with the eyes." />
+    <figcaption>Lighten. One firefly over the river. Follow it with your eyes.</figcaption>
+  </figure>
   <p><strong>Simple EMDR</strong> (<code>/emdr</code>) opens from Lighten. One clinic-style tracking light on a dark line. Not EMDR therapy with a clinician.</p>
 
   <h2>Simple EMDR in detail</h2>
+  <figure>
+    <img src="screenshots/simple-emdr.png" alt="Simple EMDR: one pale green tracking light on a dark horizontal line, Start and Stop controls, Slow 8 per minute, and guidance to pause, feel, let go, and keep breathing naturally." />
+    <figcaption>Simple EMDR. One light on a line. Starts paused. Slow, about 8 sweeps a minute.</figcaption>
+  </figure>
   <ul>
     <li>One glowing dot sliding left and right</li>
     <li>Starts paused. Default Slow: about 8 one-way sweeps per minute (~7 seconds to cross)</li>

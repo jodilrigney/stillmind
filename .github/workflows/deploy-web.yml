@@ -33,6 +33,8 @@ jobs:
           cp dist/index.html dist/404.html
           cp public/overview.html dist/overview.html
           cp public/overview.md dist/overview.md
+          mkdir -p dist/screenshots
+          cp public/screenshots/* dist/screenshots/
           touch dist/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:
