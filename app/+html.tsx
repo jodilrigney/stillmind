@@ -27,7 +27,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
           <main style={{ fontFamily: "Georgia, serif", maxWidth: "40rem", margin: "2rem auto", padding: "0 1rem", lineHeight: 1.5 }}>
             <h1>StillMind</h1>
             <p>
-              This live page needs JavaScript in a real browser. Language models cannot click it. Read the full app here instead:{" "}
+              This live page needs JavaScript in a real browser. Language models cannot click it. See every screen as pictures here:{" "}
               <a href="/stillmind/overview.html">overview.html</a>
             </p>
             <p>Privacy-first calm space. Health data stays on the device. Not therapy or emergency care.</p>
