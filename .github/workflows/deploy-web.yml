@@ -28,9 +28,11 @@ jobs:
         env:
           BASE_URL: /stillmind
           EXPO_NO_TELEMETRY: 1
-      - name: SPA fallback and skip Jekyll
+      - name: SPA fallback, readable overview, skip Jekyll
         run: |
           cp dist/index.html dist/404.html
+          cp public/overview.html dist/overview.html
+          cp public/overview.md dist/overview.md
           touch dist/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:
